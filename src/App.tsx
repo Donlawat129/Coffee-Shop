@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
+import Lots from "./pages/Lots";
 import Layout from "@/components/Layout";
 import NotFound from "./pages/NotFound";
 
@@ -30,12 +31,7 @@ const App = () => (
             path="/lots"
             element={
               <Layout>
-                <div className="container mx-auto px-4 py-8">
-                  <h2 className="text-2xl font-bold">เพิ่มล๊อต</h2>
-                  <p className="text-muted-foreground mt-2">
-                    ฟีเจอร์นี้กำลังพัฒนา
-                  </p>
-                </div>
+                <Lots />
               </Layout>
             }
           />
