@@ -1,0 +1,219 @@
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface AddProductDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const AddProductDialog = ({
+  open,
+  onOpenChange,
+}: AddProductDialogProps) => {
+  const [formData, setFormData] = useState({
+    name: "",
+    category: "",
+    sku: "",
+    supplier: "",
+    initialQuantity: "",
+    unit: "",
+    costPrice: "",
+    sellingPrice: "",
+    expiryDate: "",
+    lotNumber: "",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("Form data:", formData);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">เพิ่มสินค้าใหม่</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                ชื่อสินค้า <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category">
+                หมวดหมุ่ <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, category: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="เลือกหมวดหมุ่" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bakery">เบเกอรี่</SelectItem>
+                  <SelectItem value="dairy">นม/ครีม</SelectItem>
+                  <SelectItem value="beverage">ใช้ขับ</SelectItem>
+                  <SelectItem value="equipment">เบเกอรี่</SelectItem>
+                  <SelectItem value="other">อื่นๆ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sku">
+                SKU <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="sku"
+                value={formData.sku}
+                onChange={(e) =>
+                  setFormData({ ...formData, sku: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier">ผู้จำหน่าย</Label>
+              <Input
+                id="supplier"
+                value={formData.supplier}
+                onChange={(e) =>
+                  setFormData({ ...formData, supplier: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="initialQuantity">
+                จำนวนเริ่มต้น <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="initialQuantity"
+                type="number"
+                step="0.0001"
+                value={formData.initialQuantity}
+                onChange={(e) =>
+                  setFormData({ ...formData, initialQuantity: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="unit">
+                หน่วย <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="unit"
+                placeholder="กก., ลิตร, ชิ้น"
+                value={formData.unit}
+                onChange={(e) =>
+                  setFormData({ ...formData, unit: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="costPrice">
+                ราคาต้นทุน <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="costPrice"
+                type="number"
+                step="0.01"
+                value={formData.costPrice}
+                onChange={(e) =>
+                  setFormData({ ...formData, costPrice: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sellingPrice">
+                ราคาขาย <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="sellingPrice"
+                type="number"
+                step="0.01"
+                value={formData.sellingPrice}
+                onChange={(e) =>
+                  setFormData({ ...formData, sellingPrice: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expiryDate">วันหมดอายุ</Label>
+              <Input
+                id="expiryDate"
+                type="date"
+                value={formData.expiryDate}
+                onChange={(e) =>
+                  setFormData({ ...formData, expiryDate: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lotNumber">หมายเลขล็อต</Label>
+              <Input
+                id="lotNumber"
+                value={formData.lotNumber}
+                onChange={(e) =>
+                  setFormData({ ...formData, lotNumber: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              ยกเลิก
+            </Button>
+            <Button type="submit">บันทึก</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
