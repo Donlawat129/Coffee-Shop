@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,11 +19,51 @@ import {
 interface AddProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: "create" | "edit";
+  initial?: {
+    name: string;
+    category: string; // categoryId
+    sku: string;
+    supplier?: string;
+    initialQuantity?: string;
+    unit?: string;
+    costPrice?: string;
+    sellingPrice?: string;
+    expiryDate?: string;
+    lotNumber?: string;
+  };
+  onCreate?: (data: {
+    name: string;
+    categoryId: string;
+    sku: string;
+    supplier?: string;
+    initialQuantity: number;
+    unit: string;
+    costPrice: number;
+    sellingPrice: number;
+    expiryDate?: string;
+    lotNumber?: string;
+  }) => Promise<void>;
+  onUpdate?: (data: {
+    name: string;
+    categoryId: string;
+    sku: string;
+    supplier?: string;
+    unit: string;
+    costPrice: number;
+    sellingPrice: number;
+    expiryDate?: string;
+    lotNumber?: string;
+  }) => Promise<void>;
 }
 
 export const AddProductDialog = ({
   open,
   onOpenChange,
+  mode = "create",
+  initial,
+  onCreate,
+  onUpdate,
 }: AddProductDialogProps) => {
   const [formData, setFormData] = useState({
     name: "",
@@ -37,18 +77,86 @@ export const AddProductDialog = ({
     expiryDate: "",
     lotNumber: "",
   });
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (open && initial) {
+      setFormData({
+        name: initial.name ?? "",
+        category: initial.category ?? "",
+        sku: initial.sku ?? "",
+        supplier: initial.supplier ?? "",
+        initialQuantity: initial.initialQuantity ?? "",
+        unit: initial.unit ?? "",
+        costPrice: initial.costPrice ?? "",
+        sellingPrice: initial.sellingPrice ?? "",
+        expiryDate: initial.expiryDate ?? "",
+        lotNumber: initial.lotNumber ?? "",
+      });
+    }
+  }, [open, initial]);
+
+  const m = mode;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form data:", formData);
-    onOpenChange(false);
+    if (!formData.category) return alert("กรุณาเลือกหมวดหมู่");
+
+    setSubmitting(true);
+    try {
+      if (m === "create") {
+        if (!onCreate) return;
+        await onCreate({
+          name: formData.name.trim(),
+          categoryId: formData.category,
+          sku: formData.sku.trim(),
+          supplier: formData.supplier.trim() || undefined,
+          initialQuantity: Number(formData.initialQuantity || 0),
+          unit: formData.unit.trim(),
+          costPrice: Number(formData.costPrice || 0),
+          sellingPrice: Number(formData.sellingPrice || 0),
+          expiryDate: formData.expiryDate || undefined,
+          lotNumber: formData.lotNumber.trim() || undefined,
+        });
+      } else {
+        if (!onUpdate) return;
+        await onUpdate({
+          name: formData.name.trim(),
+          categoryId: formData.category,
+          sku: formData.sku.trim(),
+          supplier: formData.supplier.trim() || undefined,
+          unit: formData.unit.trim(),
+          costPrice: Number(formData.costPrice || 0),
+          sellingPrice: Number(formData.sellingPrice || 0),
+          expiryDate: formData.expiryDate || undefined,
+          lotNumber: formData.lotNumber.trim() || undefined,
+        });
+      }
+      onOpenChange(false);
+      setFormData({
+        name: "",
+        category: "",
+        sku: "",
+        supplier: "",
+        initialQuantity: "",
+        unit: "",
+        costPrice: "",
+        sellingPrice: "",
+        expiryDate: "",
+        lotNumber: "",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">เพิ่มสินค้าใหม่</DialogTitle>
+          <DialogTitle className="text-xl font-bold">
+            {m === "create" ? "เพิ่มสินค้าใหม่" : "แก้ไขสินค้า"}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -69,7 +177,7 @@ export const AddProductDialog = ({
 
             <div className="space-y-2">
               <Label htmlFor="category">
-                หมวดหมุ่ <span className="text-destructive">*</span>
+                หมวดหมู่ <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={formData.category}
@@ -78,13 +186,13 @@ export const AddProductDialog = ({
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="เลือกหมวดหมุ่" />
+                  <SelectValue placeholder="เลือกหมวดหมู่" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bakery">เบเกอรี่</SelectItem>
                   <SelectItem value="dairy">นม/ครีม</SelectItem>
-                  <SelectItem value="beverage">ใช้ขับ</SelectItem>
-                  <SelectItem value="equipment">เบเกอรี่</SelectItem>
+                  <SelectItem value="beverage">เครื่องดื่ม</SelectItem>
+                  <SelectItem value="equipment">อุปกรณ์</SelectItem>
                   <SelectItem value="other">อื่นๆ</SelectItem>
                 </SelectContent>
               </Select>
@@ -115,21 +223,23 @@ export const AddProductDialog = ({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="initialQuantity">
-                จำนวนเริ่มต้น <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="initialQuantity"
-                type="number"
-                step="0.0001"
-                value={formData.initialQuantity}
-                onChange={(e) =>
-                  setFormData({ ...formData, initialQuantity: e.target.value })
-                }
-                required
-              />
-            </div>
+            {m === "create" && (
+              <div className="space-y-2">
+                <Label htmlFor="initialQuantity">
+                  จำนวนเริ่มต้น <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="initialQuantity"
+                  type="number"
+                  step="0.0001"
+                  value={formData.initialQuantity}
+                  onChange={(e) =>
+                    setFormData({ ...formData, initialQuantity: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="unit">
@@ -207,10 +317,17 @@ export const AddProductDialog = ({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={submitting}
             >
               ยกเลิก
             </Button>
-            <Button type="submit">บันทึก</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting
+                ? "กำลังบันทึก..."
+                : m === "create"
+                ? "บันทึก"
+                : "บันทึกการแก้ไข"}
+            </Button>
           </div>
         </form>
       </DialogContent>

@@ -22,6 +22,7 @@ interface StockAdjustDialogProps {
   type: "add" | "remove";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAdjust: (qty: number, note?: string) => Promise<void>;
 }
 
 export const StockAdjustDialog = ({
@@ -29,16 +30,29 @@ export const StockAdjustDialog = ({
   type,
   open,
   onOpenChange,
+  onAdjust,
 }: StockAdjustDialogProps) => {
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Adjust stock:", { product, type, quantity, note });
-    onOpenChange(false);
-    setQuantity("");
-    setNote("");
+    const q = Number(quantity);
+    if (!Number.isFinite(q) || q <= 0) return alert("กรุณาใส่จำนวนที่มากกว่า 0");
+    if (type === "remove" && q > product.stock) {
+      return alert("จำนวนตัดมากกว่าสต๊อกคงเหลือ");
+    }
+
+    setSubmitting(true);
+    try {
+      await onAdjust(q, note || undefined);
+      onOpenChange(false);
+      setQuantity("");
+      setNote("");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -93,17 +107,17 @@ export const StockAdjustDialog = ({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={submitting}
             >
               ยกเลิก
             </Button>
             <Button
               type="submit"
               variant={type === "add" ? "default" : "destructive"}
-              className={
-                type === "add" ? "bg-success hover:bg-success/90" : ""
-              }
+              className={type === "add" ? "bg-success hover:bg-success/90" : ""}
+              disabled={submitting}
             >
-              {type === "add" ? "เติมสต๊อก" : "ตัดสต๊อก"}
+              {submitting ? "กำลังบันทึก..." : type === "add" ? "เติมสต๊อก" : "ตัดสต๊อก"}
             </Button>
           </div>
         </form>
