@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddProductDialog } from "@/components/products/AddProductDialog";
 import { MultiStockCutDialog } from "@/components/inventory/MultiStockCutDialog";
+import { DeleteConfirmDialog } from "@/components/inventory/DeleteConfirmDialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface Product {
   id: string;
@@ -41,12 +43,15 @@ const mockProducts: Product[] = [
 ];
 
 const Inventory = () => {
-  const [products] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>(mockProducts);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCutDialogOpen, setIsCutDialogOpen] = useState(false);
   const [isMultiCutDialogOpen, setIsMultiCutDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string[]>([]);
   const [selectedSort, setSelectedSort] = useState("ทุกหมวดหมุ่");
+  const { toast } = useToast();
 
   const toggleProductSelection = (productId: string) => {
     setSelectedProducts((prev) =>
@@ -58,20 +63,62 @@ const Inventory = () => {
 
   const handleMultiStockCut = () => {
     if (selectedProducts.length === 0) {
+      toast({
+        title: "กรุณาเลือกสินค้า",
+        description: "กรุณาเลือกสินค้าที่ต้องการตัดสต๊อกก่อน",
+        variant: "destructive",
+      });
       return;
     }
     setIsMultiCutDialogOpen(true);
   };
 
-  const handleMultiDelete = () => {
-    if (selectedProducts.length === 0) {
+  const handleOpenDeleteDialog = (productIds: string[]) => {
+    if (productIds.length === 0) {
+      toast({
+        title: "กรุณาเลือกสินค้า",
+        description: "กรุณาเลือกสินค้าที่ต้องการลบก่อน",
+        variant: "destructive",
+      });
       return;
     }
-    // Handle delete
+    setDeleteTarget(productIds);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    setProducts((prev) => prev.filter((p) => !deleteTarget.includes(p.id)));
+    toast({
+      title: "ลบสินค้าสำเร็จ",
+      description: `ลบสินค้า ${deleteTarget.length} รายการเรียบร้อยแล้ว`,
+    });
+    setSelectedProducts([]);
+    setDeleteTarget([]);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const handleSingleDelete = (productId: string) => {
+    handleOpenDeleteDialog([productId]);
+  };
+
+  const handleMultiDelete = () => {
+    handleOpenDeleteDialog(selectedProducts);
+  };
+
+  const handleSelectAll = () => {
+    setSelectedProducts(products.map((p) => p.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedProducts([]);
   };
 
   const selectedProductsData = products.filter((p) =>
     selectedProducts.includes(p.id)
+  );
+
+  const deleteTargetProducts = products.filter((p) =>
+    deleteTarget.includes(p.id)
   );
 
   return (
@@ -140,7 +187,12 @@ const Inventory = () => {
             <p className="text-sm text-muted-foreground mb-4">
               ลบสินค้าออกจากคลัง
             </p>
-            <Button variant="destructive" className="w-full">
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={handleMultiDelete}
+              disabled={selectedProducts.length === 0}
+            >
               ลบสินค้า
             </Button>
           </Card>
@@ -195,10 +247,10 @@ const Inventory = () => {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleSelectAll}>
                 เลือกทั้งหมด
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleDeselectAll}>
                 ยกเลิกการเลือก
               </Button>
             </div>
@@ -249,7 +301,11 @@ const Inventory = () => {
                   <Button size="icon" variant="ghost">
                     <Minus className="w-4 h-4 text-secondary" />
                   </Button>
-                  <Button size="icon" variant="ghost">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleSingleDelete(product.id)}
+                  >
                     <Trash2 className="w-4 h-4 text-destructive" />
                   </Button>
                 </div>
@@ -268,6 +324,14 @@ const Inventory = () => {
         open={isMultiCutDialogOpen}
         onOpenChange={setIsMultiCutDialogOpen}
         selectedProducts={selectedProductsData}
+      />
+
+      <DeleteConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteConfirm}
+        productCount={deleteTarget.length}
+        productNames={deleteTargetProducts.map((p) => p.name)}
       />
     </div>
   );
