@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
 import Lots from "./pages/Lots";
+import History from "./pages/History";
+import Reports from "./pages/Reports";
 import Layout from "@/components/Layout";
 import NotFound from "./pages/NotFound";
 
@@ -39,12 +41,7 @@ const App = () => (
             path="/history"
             element={
               <Layout>
-                <div className="container mx-auto px-4 py-8">
-                  <h2 className="text-2xl font-bold">ประวัติ</h2>
-                  <p className="text-muted-foreground mt-2">
-                    ฟีเจอร์นี้กำลังพัฒนา
-                  </p>
-                </div>
+                <History />
               </Layout>
             }
           />
@@ -52,12 +49,7 @@ const App = () => (
             path="/reports"
             element={
               <Layout>
-                <div className="container mx-auto px-4 py-8">
-                  <h2 className="text-2xl font-bold">รายงาน</h2>
-                  <p className="text-muted-foreground mt-2">
-                    ฟีเจอร์นี้กำลังพัฒนา
-                  </p>
-                </div>
+                <Reports />
               </Layout>
             }
           />
