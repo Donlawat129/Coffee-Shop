@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,19 +33,19 @@ interface Product {
   stock: number;
 }
 
-interface MultiStockCutDialogProps {
+interface SingleStockCutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedProducts: Product[];
-  onConfirm: (productIds: string[], quantity: number, note: string) => void;
+  product: Product | null;
+  onConfirm: (productId: string, quantity: number, note: string) => void;
 }
 
-export const MultiStockCutDialog = ({
+export const SingleStockCutDialog = ({
   open,
   onOpenChange,
-  selectedProducts,
+  product,
   onConfirm,
-}: MultiStockCutDialogProps) => {
+}: SingleStockCutDialogProps) => {
   const {
     register,
     handleSubmit,
@@ -58,22 +59,14 @@ export const MultiStockCutDialog = ({
   const quantity = watch("quantity");
 
   const onSubmit = (data: StockCutForm) => {
-    const cutAmount = Number(data.quantity);
+    if (!product) return;
     
-    // Check if any product will have negative stock
-    const hasExceededStock = selectedProducts.some(
-      (product) => cutAmount > product.stock
-    );
-
-    if (hasExceededStock) {
+    const cutAmount = Number(data.quantity);
+    if (cutAmount > product.stock) {
       return;
     }
 
-    onConfirm(
-      selectedProducts.map((p) => p.id),
-      cutAmount,
-      data.note || ""
-    );
+    onConfirm(product.id, cutAmount, data.note || "");
     reset();
     onOpenChange(false);
   };
@@ -83,43 +76,33 @@ export const MultiStockCutDialog = ({
     onOpenChange(false);
   };
 
+  if (!product) return null;
+
   const cutAmount = Number(quantity) || 0;
-  const productsExceedingStock = selectedProducts.filter(
-    (p) => cutAmount > p.stock
-  );
+  const remainingStock = product.stock - cutAmount;
+  const isExceedingStock = cutAmount > product.stock;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">
-            ตัดสต๊อกหลายรายการ
-          </DialogTitle>
+          <DialogTitle className="text-xl font-bold">ตัดสต๊อกสินค้า</DialogTitle>
           <DialogDescription>
-            กรอกจำนวนที่ต้องการตัดออกจากสต๊อกของแต่ละรายการ
+            กรอกจำนวนที่ต้องการตัดออกจากสต๊อก
           </DialogDescription>
         </DialogHeader>
 
         <div className="bg-muted p-4 rounded-lg mb-4">
-          <h3 className="font-medium mb-3">
-            สินค้าที่เลือก ({selectedProducts.length} รายการ):
-          </h3>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {selectedProducts.map((product) => (
-              <div
-                key={product.id}
-                className="flex justify-between items-center text-sm bg-background p-2 rounded"
-              >
-                <span className="font-medium">{product.name}</span>
-                <span className="text-muted-foreground">
-                  สต๊อก:{" "}
-                  {product.stock.toLocaleString("th-TH", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 4,
-                  })}
-                </span>
-              </div>
-            ))}
+          <h3 className="font-medium mb-3">สินค้าที่เลือก (1 รายการ):</h3>
+          <div className="flex justify-between items-center text-sm bg-background p-3 rounded">
+            <span className="font-medium">{product.name}</span>
+            <span className="text-muted-foreground">
+              สต๊อก:{" "}
+              {product.stock.toLocaleString("th-TH", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 4,
+              })}
+            </span>
           </div>
         </div>
 
@@ -135,28 +118,26 @@ export const MultiStockCutDialog = ({
               step="0.0001"
               placeholder="0"
               {...register("quantity")}
-              className={
-                errors.quantity || productsExceedingStock.length > 0
-                  ? "border-destructive"
-                  : ""
-              }
+              className={errors.quantity || isExceedingStock ? "border-destructive" : ""}
             />
             {errors.quantity && (
               <p className="text-sm text-destructive">{errors.quantity.message}</p>
             )}
-            {productsExceedingStock.length > 0 && !errors.quantity && (
-              <div className="text-sm text-destructive space-y-1">
-                <p className="font-medium">
-                  สินค้าต่อไปนี้มีสต๊อกไม่เพียงพอ:
-                </p>
-                <ul className="list-disc list-inside">
-                  {productsExceedingStock.map((product) => (
-                    <li key={product.id}>
-                      {product.name} (สต๊อกคงเหลือ: {product.stock.toLocaleString("th-TH")})
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {isExceedingStock && !errors.quantity && (
+              <p className="text-sm text-destructive">
+                จำนวนที่ต้องการตัดมากกว่าสต๊อกที่มีอยู่
+              </p>
+            )}
+            {cutAmount > 0 && !isExceedingStock && (
+              <p className="text-sm text-muted-foreground">
+                สต๊อกคงเหลือหลังตัด:{" "}
+                <span className="font-medium">
+                  {remainingStock.toLocaleString("th-TH", {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 4,
+                  })}
+                </span>
+              </p>
             )}
           </div>
 
@@ -180,7 +161,7 @@ export const MultiStockCutDialog = ({
             <Button
               type="submit"
               className="bg-secondary hover:bg-secondary/90"
-              disabled={productsExceedingStock.length > 0}
+              disabled={isExceedingStock}
             >
               ตัดสต๊อก
             </Button>

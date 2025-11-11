@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddProductDialog } from "@/components/products/AddProductDialog";
 import { MultiStockCutDialog } from "@/components/inventory/MultiStockCutDialog";
+import { SingleStockCutDialog } from "@/components/inventory/SingleStockCutDialog";
 import { DeleteConfirmDialog } from "@/components/inventory/DeleteConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -46,10 +47,11 @@ const Inventory = () => {
   const [products, setProducts] = useState<Product[]>(mockProducts);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isCutDialogOpen, setIsCutDialogOpen] = useState(false);
+  const [isSingleCutDialogOpen, setIsSingleCutDialogOpen] = useState(false);
   const [isMultiCutDialogOpen, setIsMultiCutDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string[]>([]);
+  const [cutTarget, setCutTarget] = useState<Product | null>(null);
   const [selectedSort, setSelectedSort] = useState("ทุกหมวดหมุ่");
   const { toast } = useToast();
 
@@ -113,6 +115,44 @@ const Inventory = () => {
     setSelectedProducts([]);
   };
 
+  const handleSingleStockCut = (product: Product) => {
+    setCutTarget(product);
+    setIsSingleCutDialogOpen(true);
+  };
+
+  const handleSingleCutConfirm = (
+    productId: string,
+    quantity: number,
+    note: string
+  ) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === productId ? { ...p, stock: p.stock - quantity } : p
+      )
+    );
+    toast({
+      title: "ตัดสต๊อกสำเร็จ",
+      description: `ตัดสต๊อก ${quantity.toLocaleString("th-TH")} หน่วยเรียบร้อยแล้ว`,
+    });
+  };
+
+  const handleMultiCutConfirm = (
+    productIds: string[],
+    quantity: number,
+    note: string
+  ) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        productIds.includes(p.id) ? { ...p, stock: p.stock - quantity } : p
+      )
+    );
+    toast({
+      title: "ตัดสต๊อกสำเร็จ",
+      description: `ตัดสต๊อก ${productIds.length} รายการเรียบร้อยแล้ว`,
+    });
+    setSelectedProducts([]);
+  };
+
   const selectedProductsData = products.filter((p) =>
     selectedProducts.includes(p.id)
   );
@@ -171,7 +211,8 @@ const Inventory = () => {
             <Button
               variant="default"
               className="w-full bg-secondary hover:bg-secondary/90"
-              onClick={() => setIsCutDialogOpen(true)}
+              onClick={handleMultiStockCut}
+              disabled={selectedProducts.length === 0}
             >
               ตัดสต๊อก
             </Button>
@@ -295,10 +336,15 @@ const Inventory = () => {
                   <Button size="icon" variant="ghost">
                     <Edit className="w-4 h-4 text-primary" />
                   </Button>
-                  <Button size="icon" variant="ghost">
+                  <Button size="icon" variant="ghost" title="เพิ่มสต๊อก">
                     <Plus className="w-4 h-4 text-success" />
                   </Button>
-                  <Button size="icon" variant="ghost">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title="ตัดสต๊อก"
+                    onClick={() => handleSingleStockCut(product)}
+                  >
                     <Minus className="w-4 h-4 text-secondary" />
                   </Button>
                   <Button
@@ -320,10 +366,18 @@ const Inventory = () => {
         onOpenChange={setIsAddDialogOpen}
       />
 
+      <SingleStockCutDialog
+        open={isSingleCutDialogOpen}
+        onOpenChange={setIsSingleCutDialogOpen}
+        product={cutTarget}
+        onConfirm={handleSingleCutConfirm}
+      />
+
       <MultiStockCutDialog
         open={isMultiCutDialogOpen}
         onOpenChange={setIsMultiCutDialogOpen}
         selectedProducts={selectedProductsData}
+        onConfirm={handleMultiCutConfirm}
       />
 
       <DeleteConfirmDialog
