@@ -1,3 +1,4 @@
+// src/pages/Products.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,53 +20,44 @@ import {
   getProduct,
 } from "@/lib/productsApi";
 
-const CATEGORIES = [
-  { id: "all", label: "ทุกหมวดหมู่" },
-  { id: "bakery", label: "เบเกอรี่" },
-  { id: "dairy", label: "นม/ครีม" },
-  { id: "beverage", label: "เครื่องดื่ม" },
-  { id: "equipment", label: "อุปกรณ์" },
-  { id: "other", label: "อื่นๆ" },
-];
-
 interface Product {
   id: string;
   name: string;
   sku: string;
-  categoryId: string;
-  supplier?: string;
-  stock: number;
-  price: number;
   unit?: string;
-  costPrice?: number;
+  stock: number;
   expiryDate?: string;
   lotNumber?: string;
 }
 
-// ✅ ใช้แทน any | null สำหรับค่า initial ของฟอร์มแก้ไข
+// ใช้เมื่อดึงจาก backend ซึ่งอาจมี field เสริมเข้ามา
+type FullProduct = Product & {
+  supplier?: string | null;
+  costPrice?: number | null;
+  price?: number | null;
+};
+
+// ฟอร์มเริ่มต้นตอนแก้ไข (ใช้ category เก็บ unit ตาม UI เดิม)
 type ProductFormInitial = {
   name: string;
-  category: string;          // categoryId
+  category: string;   // เก็บ "unit" ที่เลือก
   sku: string;
-  supplier?: string;
-  initialQuantity?: string;  // ใช้เฉพาะโหมด create
   unit?: string;
-  costPrice?: string;
-  sellingPrice?: string;
+  stock?: number;     // แก้เป็น number ให้ตรงกับ AddProductDialog.initial
   expiryDate?: string;
   lotNumber?: string;
 };
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedUnit, setSelectedUnit] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustType, setAdjustType] = useState<"add" | "remove">("add");
 
   // for edit
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editInitial, setEditInitial] = useState<ProductFormInitial | null>(null); // ✅ fixed
+  const [editInitial, setEditInitial] = useState<ProductFormInitial | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,29 +65,44 @@ const Products = () => {
     return () => unsub();
   }, []);
 
+  // รายการหน่วยนับจากสินค้าจริง (dynamic)
+  const unitOptions = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => { if (p.unit) set.add(p.unit); });
+    return ["all", ...Array.from(set)];
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === "all") return products;
-    return products.filter((p) => p.categoryId === selectedCategory);
-  }, [products, selectedCategory]);
+    if (selectedUnit === "all") return products;
+    return products.filter((p) => (p.unit || "") === selectedUnit);
+  }, [products, selectedUnit]);
 
   const handleAdjustStock = (product: Product, type: "add" | "remove") => {
     setSelectedProduct(product);
     setAdjustType(type);
   };
 
+  // ใช้ shape ใหม่จาก AddProductDialog
   const handleCreateProduct = async (data: {
     name: string;
-    categoryId: string;
     sku: string;
-    supplier?: string;
-    initialQuantity: number;
     unit: string;
-    costPrice: number;
-    sellingPrice: number;
+    stock: number;
     expiryDate?: string;
     lotNumber?: string;
   }) => {
-    await addProduct(data);
+    // map ให้เข้ากับ API เดิม (ถ้า backend ยังรออัปเดต)
+    await addProduct({
+      name: data.name,
+      sku: data.sku,
+      unit: data.unit,
+      categoryId: data.unit,          // เพื่อ compatibility กับสคีมาเดิม
+      initialQuantity: data.stock,    // สต๊อกเริ่มต้น
+      costPrice: 0,                   // ยังไม่ใช้ราคา/ต้นทุน → 0 ไว้ก่อน
+      sellingPrice: 0,
+      expiryDate: data.expiryDate,
+      lotNumber: data.lotNumber,
+    });
   };
 
   const handleAdjustCommit = async (
@@ -111,37 +118,31 @@ const Products = () => {
     if (confirm("ยืนยันลบสินค้านี้?")) await deleteProduct(id);
   };
 
-  const labelOf = (catId: string) =>
-    CATEGORIES.find((c) => c.id === catId)?.label ?? catId;
+  const labelUnit = (u?: string) => u || "-";
 
   const openEdit = async (p: Product) => {
     setEditingId(p.id);
-    const full = await getProduct(p.id).catch(() => null);
-    const v = full || p;
+    const full = (await getProduct(p.id).catch(() => null)) as FullProduct | null;
+    const v: FullProduct = full ?? (p as FullProduct);
 
     setEditInitial({
       name: v.name || "",
-      category: v.categoryId || "",
+      category: v.unit || "",      // ใช้เก็บ unit ที่เลือก
       sku: v.sku || "",
-      supplier: v.supplier || "",
       unit: v.unit || "",
-      costPrice: v.costPrice != null ? String(v.costPrice) : "",
-      sellingPrice: v.price != null ? String(v.price) : "",
+      stock: v.stock ?? 0,         // ส่งเป็น number ให้ dialog
       expiryDate: v.expiryDate || "",
       lotNumber: v.lotNumber || "",
-      initialQuantity: "", // not used in edit
     });
     setIsEditDialogOpen(true);
   };
 
+  // ใช้ shape ใหม่จาก AddProductDialog ตอนแก้ไข
   const handleUpdateProduct = async (data: {
     name: string;
-    categoryId: string;
     sku: string;
-    supplier?: string;
     unit: string;
-    costPrice: number;
-    sellingPrice: number;
+    stock: number;
     expiryDate?: string;
     lotNumber?: string;
   }) => {
@@ -149,11 +150,9 @@ const Products = () => {
     await updateProduct(editingId, {
       name: data.name,
       sku: data.sku,
-      categoryId: data.categoryId,
-      supplier: data.supplier || null,
+      categoryId: data.unit,                   // map เพื่อเข้ากับ backend เดิม หากยังไม่ได้อัป
       unit: data.unit || null,
-      costPrice: Number.isFinite(data.costPrice) ? data.costPrice : 0,
-      price: Number.isFinite(data.sellingPrice) ? data.sellingPrice : 0,
+      stock: Number.isFinite(data.stock) ? data.stock : 0,
       expiryDate: data.expiryDate || null,
       lotNumber: data.lotNumber || null,
     });
@@ -171,17 +170,16 @@ const Products = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
-                  {CATEGORIES.find((c) => c.id === selectedCategory)?.label ??
-                    "ทุกหมวดหมู่"}
+                  {selectedUnit === "all" ? "ทุกหน่วยนับ" : selectedUnit}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {CATEGORIES.map((cat) => (
+                {unitOptions.map((u) => (
                   <DropdownMenuItem
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
+                    key={u}
+                    onClick={() => setSelectedUnit(u)}
                   >
-                    {cat.label}
+                    {u === "all" ? "ทุกหน่วยนับ" : u}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -200,10 +198,7 @@ const Products = () => {
                 <div>
                   <h3 className="font-semibold text-lg mb-1">{product.name}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {labelOf(product.categoryId)} | รหัส: {product.sku}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    ผู้จำหน่าย: {product.supplier || "-"}
+                    หน่วย: {labelUnit(product.unit)} | รหัส: {product.sku}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -227,15 +222,6 @@ const Products = () => {
                     {product.stock.toLocaleString("th-TH", {
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 4,
-                    })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">ราคาขาย:</span>
-                  <span className="font-semibold">
-                    ฿
-                    {product.price.toLocaleString("th-TH", {
-                      minimumFractionDigits: 2,
                     })}
                   </span>
                 </div>

@@ -86,6 +86,7 @@ export const StockAdjustDialog = ({
               id="quantity"
               type="number"
               step="0.0001"
+              min="0.0001"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               required
