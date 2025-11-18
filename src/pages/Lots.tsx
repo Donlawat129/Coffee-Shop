@@ -1,8 +1,8 @@
 // src/pages/Lots.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackagePlus, Lightbulb } from "lucide-react";
+import { PackagePlus, Lightbulb, Pencil } from "lucide-react";
 import { AddLotDialog, type BulkLotPayload } from "@/components/lots/AddLotDialog";
 import { useToast } from "@/hooks/use-toast";
 import { addProduct } from "@/lib/productsApi";
@@ -15,12 +15,20 @@ import {
   getLot,
   type LotHeader,
   type LotItem,
+  deleteLotHard,
 } from "@/lib/lotsApi";
+import { db } from "@/lib/firebase";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type UiLotRow = {
   id: string;
   lotNumber: string;
-  supplier: string;
+  supplier: string;             // ใช้เก็บ "ล๊อตใหม่" | "ล๊อตเดิม"
   expiryDate?: string | null;
   itemsCount: number;
   createdAtISO: string;
@@ -37,13 +45,20 @@ const Lots = () => {
   const [detailItems, setDetailItems] = useState<UiItem[]>([]);
   const { toast } = useToast();
 
+  // ====== Edit header dialog state ======
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLotNumber, setEditLotNumber] = useState("");
+  const [editExpiry, setEditExpiry] = useState("");
+  const [editType, setEditType] = useState<"new" | "existing">("new");
+  const editLabel = editType === "new" ? "ล๊อตใหม่" : "ล๊อตเดิม";
+
   // ลิสต์ล๊อตทั้งหมด (realtime)
   useEffect(() => {
     const unsub = onLotsSubscribe((rows: Array<LotHeader & { id: string }>) => {
       const mapped: UiLotRow[] = rows.map((r) => ({
         id: r.id,
         lotNumber: r.lotNumber,
-        supplier: r.supplier,
+        supplier: r.supplier ?? "", // เราจะใช้เก็บคำว่า "ล๊อตใหม่/ล๊อตเดิม"
         expiryDate: r.expiryDate ?? null,
         itemsCount: r.itemsCount ?? 0,
         createdAtISO:
@@ -64,35 +79,37 @@ const Lots = () => {
       return;
     }
 
-    // ป้องกัน set state หลัง unmount/เปลี่ยน lot
     let cancelled = false;
-
-    // โหลดหัวล๊อตครั้งเดียว
     (async () => {
       const hd = await getLot(selectedLotId);
       if (!cancelled) setDetailLot(hd);
     })();
 
-    // subscribe รายการสินค้าในล๊อตแบบ realtime
     const unsubItems = onLotItemsSubscribe(selectedLotId, (rows) => setDetailItems(rows));
-
-    // cleanup
     return () => {
       cancelled = true;
       unsubItems();
     };
   }, [selectedLotId]);
 
+  const existingLotsForDialog = useMemo(
+    () => lots.map(l => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate ?? undefined })),
+    [lots]
+  );
 
-  const handleBulkCreate = async ({ lotHeader, items }: BulkLotPayload) => {
-    // 1) สร้างหัวล๊อต
-    const lotId = await addLot({
-      lotNumber: lotHeader.lotNumber,
-      supplier: lotHeader.supplier,
-      expiryDate: lotHeader.expiryDate,
-    });
+  const handleBulkCreate = async ({ mode, existingLotId, lotHeader, items }: BulkLotPayload) => {
+    let lotId = existingLotId || "";
 
-    // 2) ยิงเพิ่มสินค้าแบบหน้า Products ทีละตัว
+    // 1) ถ้าเป็นล๊อตใหม่ → สร้างหัวล๊อต (ใช้ supplier เก็บ "ล๊อตใหม่")
+    if (mode === "new") {
+      lotId = await addLot({
+        lotNumber: lotHeader.lotNumber,
+        supplier: "ล๊อตใหม่",        // เก็บสถานะใน field เดิม
+        expiryDate: lotHeader.expiryDate,
+      });
+    }
+
+    // 2) เพิ่มสินค้าเข้าคลัง (Products) ทีละตัว
     await Promise.all(
       items.map((it) =>
         addProduct({
@@ -105,7 +122,7 @@ const Lots = () => {
           sellingPrice: 0,
           expiryDate: it.expiryDate ?? lotHeader.expiryDate,
           lotNumber: it.lotNumber ?? lotHeader.lotNumber,
-          supplier: lotHeader.supplier,
+          // supplier: ไม่ใช้แล้ว
         })
       )
     );
@@ -118,22 +135,61 @@ const Lots = () => {
       stock: it.stock,
       expiryDate: it.expiryDate ?? lotHeader.expiryDate ?? null,
       lotNumber: it.lotNumber ?? lotHeader.lotNumber ?? null,
-      productId: null, // สามารถปรับให้เก็บ productId จริงได้ถ้า addProduct คืน id
+      productId: null,
     }));
     await addLotItems(lotId, lotItems);
 
-    // 4) อัปเดตจำนวนรายการ
-    await setLotItemsCount(lotId, items.length);
+    // 4) อัปเดตจำนวนรายการ (เพิ่มตามจำนวนที่ใส่เข้ามา)
+    await setLotItemsCount(lotId, (detailLot?.itemsCount ?? 0) + items.length);
 
     toast({
-      title: "บันทึกล๊อตสำเร็จ",
+      title: mode === "new" ? "สร้างล๊อตใหม่สำเร็จ" : "เพิ่มสินค้าเข้า 'ล๊อตเดิม' สำเร็จ",
       description: `เพิ่มสินค้า ${items.length} รายการ`,
     });
     setIsAddLotDialogOpen(false);
 
-    // เปิดรายละเอียดล๊อตที่เพิ่งสร้างด้านล่างทันที
+    // เปิดรายละเอียดล๊อตที่เพิ่งจัดการ
     setSelectedLotId(lotId);
   };
+
+  // ====== เปิด dialog แก้ไขหัวล๊อต ======
+  const openEditHeader = () => {
+    if (!detailLot) return;
+    setEditLotNumber(detailLot.lotNumber || "");
+    setEditExpiry(detailLot.expiryDate || "");
+    setEditType((detailLot.supplier ?? "ล๊อตใหม่") === "ล๊อตเดิม" ? "existing" : "new");
+    setEditOpen(true);
+  };
+
+  const saveEditHeader = async () => {
+    if (!detailLot) return;
+    const ref = doc(db, "lots", detailLot.id);
+    await updateDoc(ref, {
+      lotNumber: editLotNumber.trim(),
+      expiryDate: editExpiry || null,
+      supplier: editLabel, // "ล๊อตใหม่"/"ล๊อตเดิม"
+      updatedAt: serverTimestamp(),
+    });
+    setEditOpen(false);
+    toast({ title: "อัปเดตหัวล๊อตแล้ว", description: "แก้ไขข้อมูลหัวล๊อตสำเร็จ" });
+  };
+
+  const deleteCurrentLot = async () => {
+    if (!detailLot) return;
+    const ok = confirm(
+      "ยืนยันลบล๊อตนี้พร้อมรายการสินค้าทั้งหมดในล๊อต?\n(ลบถาวรและไม่สามารถกู้คืนได้)"
+    );
+    if (!ok) return;
+
+    await deleteLotHard(detailLot.id);
+    setEditOpen(false);
+    setSelectedLotId(null);
+    toast({
+      title: "ลบล๊อตสำเร็จ",
+      description: "ลบหัวล๊อตและรายการทั้งหมดภายใต้ล๊อตแล้ว",
+    });
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -143,7 +199,7 @@ const Lots = () => {
           <h2 className="text-2xl font-bold">เพิ่มสินค้าเป็นล๊อต</h2>
           <Button onClick={() => setIsAddLotDialogOpen(true)} className="bg-success hover:bg-success/90">
             <PackagePlus className="w-4 h-4 mr-2" />
-            เพิ่มล๊อตใหม่
+            เพิ่มล๊อตใหม่ / ใช้ล๊อตเดิม
           </Button>
         </div>
 
@@ -165,7 +221,7 @@ const Lots = () => {
                       <div>
                         <div className="font-medium">
                           ล๊อต: {lot.lotNumber}
-                          <span className="text-muted-foreground"> • ผู้จำหน่าย: {lot.supplier}</span>
+                          <span className="text-muted-foreground"> • ประเภท: {lot.supplier || "-"}</span>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           สินค้า: {lot.itemsCount} รายการ
@@ -197,10 +253,9 @@ const Lots = () => {
                 <h3 className="font-semibold">เคล็ดลับ</h3>
               </div>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>เหมาะกับสินค้าเข้าพร้อมกันจากผู้จำหน่ายเดียวกัน</span></li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>เลือก “ล๊อตเดิม” เมื่อต้องการเพิ่มสินค้าเข้าสู่ล๊อตที่มีอยู่</span></li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>เลือก “ล๊อตใหม่” เมื่อเริ่มล็อตสินค้าใหม่</span></li>
                 <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>ตั้งวันหมดอายุที่หัวล๊อต แล้วปรับรายรายการได้</span></li>
-                <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>ช่วยเพิ่มสินค้าจำนวนมากได้รวดเร็ว</span></li>
-                <li className="flex items-start gap-2"><span className="text-primary mt-1">•</span><span>ติดตามย้อนกลับด้วยเลขล๊อตได้ง่าย</span></li>
               </ul>
             </Card>
           </div>
@@ -211,9 +266,15 @@ const Lots = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-semibold">รายละเอียดล๊อต</h3>
-              <Button variant="outline" onClick={() => setSelectedLotId(null)}>
-                ปิดรายละเอียด
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={openEditHeader}>
+                  <Pencil className="w-4 h-4 mr-1" />
+                  แก้ไขหัวล๊อต
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedLotId(null)}>
+                  ปิดรายละเอียด
+                </Button>
+              </div>
             </div>
 
             {detailLot ? (
@@ -224,8 +285,8 @@ const Lots = () => {
                     <div className="font-medium">{detailLot.lotNumber}</div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground">ผู้จำหน่าย</div>
-                    <div className="font-medium">{detailLot.supplier}</div>
+                    <div className="text-muted-foreground">ประเภท</div>
+                    <div className="font-medium">{detailLot.supplier ?? "-"}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">วันหมดอายุ</div>
@@ -291,7 +352,63 @@ const Lots = () => {
         open={isAddLotDialogOpen}
         onOpenChange={setIsAddLotDialogOpen}
         onBulkCreate={handleBulkCreate}
+        existingLots={existingLotsForDialog}
       />
+
+      {/* ===== Edit Header Dialog ===== */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>แก้ไขหัวล๊อต</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>ประเภทล๊อต</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={editType === "new" ? "default" : "outline"}
+                  onClick={() => setEditType("new")}
+                >
+                  ล๊อตใหม่
+                </Button>
+                <Button
+                  variant={editType === "existing" ? "default" : "outline"}
+                  onClick={() => setEditType("existing")}
+                >
+                  ล๊อตเดิม
+                </Button>
+              </div>
+              
+            </div>
+
+            <div className="space-y-2">
+              <Label>หมายเลขล๊อต</Label>
+              <Input value={editLotNumber} onChange={(e) => setEditLotNumber(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>วันหมดอายุ</Label>
+              <Input type="date" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)} />
+            </div>
+
+          <div className="flex justify-between items-center gap-2 pt-2">
+              {/* ปุ่มลบอยู่ซ้ายมือ แยกจากกลุ่มบันทึก */}
+              <Button
+                variant="destructive"
+                onClick={deleteCurrentLot}
+              >
+                ลบล๊อตนี้
+              </Button>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setEditOpen(false)}>ยกเลิก</Button>
+                <Button onClick={saveEditHeader}>บันทึก</Button>
+              </div>
+            </div>  
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

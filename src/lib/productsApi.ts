@@ -82,7 +82,6 @@ export async function addProduct(input: {
   lotNumber?: string;
 }) {
   const now = serverTimestamp();
-  // สร้างสินค้า
   const ref = await addDoc(col, {
     name: input.name,
     sku: input.sku,
@@ -98,7 +97,6 @@ export async function addProduct(input: {
     updatedAt: now,
   } as Partial<ProductDoc>);
 
-  // บันทึก movement เริ่มต้น (optional)
   await addDoc(collection(ref, "movements"), {
     type: "init",
     qty: Number(input.initialQuantity || 0),
@@ -122,7 +120,6 @@ export async function adjustStock(
     const current = Number(data.stock || 0);
     const delta = type === "add" ? qty : -qty;
     const next = current + delta;
-
     if (next < 0) throw new Error("สต๊อกติดลบไม่ได้");
 
     tx.update(ref, { stock: next, updatedAt: serverTimestamp() });
@@ -136,6 +133,7 @@ export async function adjustStock(
   });
 }
 
+// ✅ กลับมาใช้ลบแบบเดิม (ง่ายสุด) ให้ UI History กรองเอง
 export async function deleteProduct(productId: string) {
   await deleteDoc(doc(col, productId));
 }
@@ -145,7 +143,7 @@ export async function updateProduct(productId: string, patch: Partial<ProductDoc
   await updateDoc(doc(col, productId), { ...patch, updatedAt: serverTimestamp() });
 }
 
-// ✅ โหลดข้อมูลเต็มของสินค้า 1 รายการ (ใช้พรีฟิลตอนกด Edit)
+// ✅ โหลดข้อมูลสินค้าตัวเดียว
 export async function getProduct(productId: string) {
   const ref = doc(col, productId);
   const s = await getDoc(ref);

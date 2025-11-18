@@ -10,6 +10,9 @@ import {
   orderBy,
   Timestamp,
   getDoc,
+  getDocs,
+  limit,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -105,4 +108,21 @@ export function onLotItemsSubscribe(
     });
     cb(data);
   });
+}
+
+/** ลบล๊อตแบบถาวร: ลบ subcollection items ทั้งหมดก่อน แล้วค่อยลบหัวล๊อต */
+export async function deleteLotHard(lotId: string): Promise<void> {
+  const lotRef = doc(db, "lots", lotId);
+  const itemsCol = collection(lotRef, "items");
+
+  const BATCH_SIZE = 400; // เผื่อเหลือใต้ลิมิต 500 writes/batch
+  while (true) {
+    const snap = await getDocs(query(itemsCol, limit(BATCH_SIZE)));
+    if (snap.empty) break;
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+
+  await deleteDoc(lotRef);
 }

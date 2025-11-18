@@ -1,4 +1,5 @@
-import { useState } from "react";
+// src/components/lots/AddLotDialog.tsx
+import { useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -12,7 +13,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 export type BulkLotItemInput = {
-  id: string;        // client-only id สำหรับ list
+  id: string;        // client-only id
   name: string;
   sku: string;
   unit: string;
@@ -22,10 +23,13 @@ export type BulkLotItemInput = {
 };
 
 export type BulkLotPayload = {
+  mode: "new" | "existing";
+  existingLotId?: string; // ต้องมีเมื่อ mode = existing
   lotHeader: {
-    lotNumber: string;
-    supplier: string;
+    lotNumber: string;      // ถ้า existing จะอิงหมายเลขล๊อตจากรายการที่เลือก
     expiryDate?: string;
+    // NOTE: ไม่ใช้ supplier แล้ว แต่ backend เดิมยังมี field นี้
+    // เราจะเซ็ต supplier เป็น "ล๊อตใหม่" / "ล๊อตเดิม" ฝั่ง caller
   };
   items: Array<{
     name: string;
@@ -37,25 +41,40 @@ export type BulkLotPayload = {
   }>;
 };
 
+type ExistingLot = {
+  id: string;
+  lotNumber: string;
+  expiryDate?: string | null;
+};
+
 type AddLotDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onBulkCreate: (payload: BulkLotPayload) => Promise<void>;
+  existingLots: ExistingLot[]; // <- เพิ่มเข้ามาเพื่อเลือก "ล๊อตเดิม"
 };
 
 const UNIT_OPTIONS = [
   "กิโลกรัม", "กรัม", "ลิตร", "มิลลิลิตร", "ชิ้น", "กล่อง", "แพ็ค", "ซอง", "อื่นๆ",
 ];
 
-export function AddLotDialog({ open, onOpenChange, onBulkCreate }: AddLotDialogProps) {
-  const [lotNumber, setLotNumber] = useState("");
-  const [supplier, setSupplier] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }: AddLotDialogProps) {
+  const [mode, setMode] = useState<"new" | "existing">("new");
+  const [selectedExistingId, setSelectedExistingId] = useState<string>("");
 
+  const [lotNumber, setLotNumber] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState<BulkLotItemInput[]>([
     { id: "1", name: "", sku: "", unit: "", stock: "", expiryDate: "", lotNumber: "" },
   ]);
+
+  const existingMap = useMemo(() => {
+    const m = new Map<string, ExistingLot>();
+    existingLots.forEach((l) => m.set(l.id, l));
+    return m;
+  }, [existingLots]);
 
   const addProductRow = () => {
     setProducts((prev) => [
@@ -80,10 +99,18 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate }: AddLotDialogP
     e.preventDefault();
 
     // validate basic
-    if (!lotNumber.trim() || !supplier.trim()) {
-      alert("กรอกหมายเลขล๊อตและผู้จำหน่ายให้ครบ");
-      return;
+    if (mode === "new") {
+      if (!lotNumber.trim()) {
+        alert("กรอกหมายเลขล๊อตให้ครบ");
+        return;
+      }
+    } else {
+      if (!selectedExistingId) {
+        alert("เลือก 'ล๊อตเดิม' ที่ต้องการใช้งาน");
+        return;
+      }
     }
+
     const mapped = products.map((p) => {
       const stockNum = Number(p.stock);
       return {
@@ -96,21 +123,33 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate }: AddLotDialogP
       };
     });
 
+    const headerLotNo =
+      mode === "new"
+        ? lotNumber.trim()
+        : (existingMap.get(selectedExistingId)?.lotNumber ?? "");
+
+    const headerExpiry =
+      mode === "new"
+        ? (expiryDate || undefined)
+        : (existingMap.get(selectedExistingId)?.expiryDate || undefined);
+
     setSubmitting(true);
     try {
       await onBulkCreate({
+        mode,
+        existingLotId: mode === "existing" ? selectedExistingId : undefined,
         lotHeader: {
-          lotNumber: lotNumber.trim(),
-          supplier: supplier.trim(),
-          expiryDate: expiryDate || undefined,
+          lotNumber: headerLotNo,
+          expiryDate: headerExpiry,
         },
         items: mapped,
       });
 
       // reset form
       onOpenChange(false);
+      setMode("new");
+      setSelectedExistingId("");
       setLotNumber("");
-      setSupplier("");
       setExpiryDate("");
       setProducts([{ id: "1", name: "", sku: "", unit: "", stock: "", expiryDate: "", lotNumber: "" }]);
     } finally {
@@ -129,19 +168,52 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate }: AddLotDialogP
           {/* ข้อมูลล๊อต */}
           <div className="bg-muted/30 p-4 rounded-lg">
             <h3 className="font-semibold mb-4">ข้อมูลล๊อต</h3>
-            <div className="grid grid-cols-3 gap-4">
+
+            {/* เลือกโหมด */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="space-y-2">
-                <Label htmlFor="lotNumber">หมายเลขล๊อต <span className="text-destructive">*</span></Label>
-                <Input id="lotNumber" value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} required />
+                <Label>เลือกประเภทล๊อต</Label>
+                <Select value={mode} onValueChange={(v) => setMode(v as "new" | "existing")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกประเภทล๊อต" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">ล๊อตใหม่</SelectItem>
+                    <SelectItem value="existing">ใช้ล๊อตเดิม</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="supplier">ผู้จำหน่าย <span className="text-destructive">*</span></Label>
-                <Input id="supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="expiryDate">วันหมดอายุ (หัวล๊อต)</Label>
-                <Input id="expiryDate" type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-              </div>
+
+              {mode === "new" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="lotNumber">หมายเลขล๊อต <span className="text-destructive">*</span></Label>
+                    <Input id="lotNumber" value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="expiryDate">วันหมดอายุ (หัวล๊อต)</Label>
+                    <Input id="expiryDate" type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2 col-span-2">
+                    <Label>เลือกล๊อตเดิม <span className="text-destructive">*</span></Label>
+                    <Select value={selectedExistingId} onValueChange={setSelectedExistingId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกล๊อตที่มีอยู่" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {existingLots.map((l) => (
+                          <SelectItem key={l.id} value={l.id}>
+                            {l.lotNumber} {l.expiryDate ? `• หมดอายุ ${l.expiryDate}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
