@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -40,6 +39,14 @@ interface SingleStockCutDialogProps {
   onConfirm: (productId: string, quantity: number, note: string) => void;
 }
 
+// ✅ helper: format dd/mm/yyyy (Gregorian)
+function formatDMY(d = new Date()): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 export const SingleStockCutDialog = ({
   open,
   onOpenChange,
@@ -60,13 +67,16 @@ export const SingleStockCutDialog = ({
 
   const onSubmit = (data: StockCutForm) => {
     if (!product) return;
-    
+
     const cutAmount = Number(data.quantity);
     if (cutAmount > product.stock) {
       return;
     }
 
-    onConfirm(product.id, cutAmount, data.note || "");
+    // ✅ stamp note ก่อนยืนยัน
+    const stampedNote = `${formatDMY()} - ตัดสต๊อก${data.note ? ` • ${data.note}` : ""}`;
+
+    onConfirm(product.id, cutAmount, stampedNote);
     reset();
     onOpenChange(false);
   };
@@ -87,9 +97,7 @@ export const SingleStockCutDialog = ({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">ตัดสต๊อกสินค้า</DialogTitle>
-          <DialogDescription>
-            กรอกจำนวนที่ต้องการตัดออกจากสต๊อก
-          </DialogDescription>
+          <DialogDescription>กรอกจำนวนที่ต้องการตัดออกจากสต๊อก</DialogDescription>
         </DialogHeader>
 
         <div className="bg-muted p-4 rounded-lg mb-4">
@@ -109,8 +117,7 @@ export const SingleStockCutDialog = ({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="quantity">
-              จำนวนที่ต้องการตัด (จากแต่ละรายการ){" "}
-              <span className="text-destructive">*</span>
+              จำนวนที่ต้องการตัด (จากแต่ละรายการ) <span className="text-destructive">*</span>
             </Label>
             <Input
               id="quantity"
@@ -120,13 +127,9 @@ export const SingleStockCutDialog = ({
               {...register("quantity")}
               className={errors.quantity || isExceedingStock ? "border-destructive" : ""}
             />
-            {errors.quantity && (
-              <p className="text-sm text-destructive">{errors.quantity.message}</p>
-            )}
+            {errors.quantity && <p className="text-sm text-destructive">{errors.quantity.message}</p>}
             {isExceedingStock && !errors.quantity && (
-              <p className="text-sm text-destructive">
-                จำนวนที่ต้องการตัดมากกว่าสต๊อกที่มีอยู่
-              </p>
+              <p className="text-sm text-destructive">จำนวนที่ต้องการตัดมากกว่าสต๊อกที่มีอยู่</p>
             )}
             {cutAmount > 0 && !isExceedingStock && (
               <p className="text-sm text-muted-foreground">
@@ -143,26 +146,15 @@ export const SingleStockCutDialog = ({
 
           <div className="space-y-2">
             <Label htmlFor="note">หมายเหตุ</Label>
-            <Textarea
-              id="note"
-              placeholder="ระบุเหตุผลในการตัดสต๊อก (ถ้ามี)"
-              {...register("note")}
-              rows={4}
-            />
-            {errors.note && (
-              <p className="text-sm text-destructive">{errors.note.message}</p>
-            )}
+            <Textarea id="note" placeholder="เหตุผล (ถ้ามี)" {...register("note")} rows={4} />
+            {errors.note && <p className="text-sm text-destructive">{errors.note.message}</p>}
           </div>
 
           <div className="flex gap-3 justify-end pt-4">
             <Button type="button" variant="outline" onClick={handleClose}>
               ยกเลิก
             </Button>
-            <Button
-              type="submit"
-              className="bg-secondary hover:bg-secondary/90"
-              disabled={isExceedingStock}
-            >
+            <Button type="submit" className="bg-secondary hover:bg-secondary/90" disabled={isExceedingStock}>
               ตัดสต๊อก
             </Button>
           </div>

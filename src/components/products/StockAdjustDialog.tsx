@@ -25,6 +25,14 @@ interface StockAdjustDialogProps {
   onAdjust: (qty: number, note?: string) => Promise<void>;
 }
 
+// ✅ helper: format dd/mm/yyyy (Gregorian)
+function formatDMY(d = new Date()): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 export const StockAdjustDialog = ({
   product,
   type,
@@ -44,9 +52,15 @@ export const StockAdjustDialog = ({
       return alert("จำนวนตัดมากกว่าสต๊อกคงเหลือ");
     }
 
+    // ✅ stamp note เมื่อ “ตัดสต๊อก”
+    const finalNote =
+      type === "remove"
+        ? `${formatDMY()} - ตัดสต๊อก${note ? ` • ${note}` : ""}`
+        : note || undefined;
+
     setSubmitting(true);
     try {
-      await onAdjust(q, note || undefined);
+      await onAdjust(q, finalNote);
       onOpenChange(false);
       setQuantity("");
       setNote("");
@@ -100,6 +114,7 @@ export const StockAdjustDialog = ({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
+              placeholder='เช่น "สินค้าใกล้หมดอายุ" (ระบบจะเติม "dd/mm/yyyy - ตัดสต๊อก" ให้อัตโนมัติเมื่อเป็นการตัด)'
             />
           </div>
 

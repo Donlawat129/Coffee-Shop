@@ -1,4 +1,3 @@
-// src/pages/History.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +59,13 @@ const TYPE_LABEL: Record<MovementType, string> = {
   remove: "ลดสต๊อก",
 };
 
+// ข้อความปฏิบัติการบนบรรทัด timestamp (ต้องการคำว่า "ตัดสต๊อก" ตามรีเควส)
+const STAMP_ACTION: Record<MovementType, string> = {
+  init: "ตั้งต้น",
+  add: "เพิ่มสต๊อก",
+  remove: "ตัดสต๊อก",
+};
+
 const TYPE_BADGE: Record<
   MovementType,
   "default" | "secondary" | "destructive" | "outline"
@@ -71,6 +77,26 @@ const TYPE_BADGE: Record<
 
 const MAX_ROWS = 500;
 const ADMIN_EMAILS = new Set(["admin@gmail.com", "superadmin@gmail.com"]);
+
+// format dd/mm/yyyy (คำนวณจากเวลาในเครื่อง/เขตเวลาโลคัล)
+function formatDMY(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+// ดึงเฉพาะ "ส่วนเนื้อหา" ของหมายเหตุ ถ้า note ถูกปั๊ม stamp มาแล้ว เช่น "01/12/2025 - ตัดสต๊อก • ข้อความผู้ใช้"
+function extractUserNote(note?: string | null): string {
+  if (!note) return "";
+  const m = note.match(
+    /^(\d{2}\/\d{2}\/\d{4})\s*-\s*(ตัดสต๊อก|เพิ่มสต๊อก|ตั้งต้น)\s*(?:•\s*)?(.*)$/
+  );
+  if (m) {
+    return (m[3] || "").trim();
+  }
+  return note.trim();
+}
 
 /* ---------- Component ---------- */
 export default function History() {
@@ -322,6 +348,13 @@ export default function History() {
               { maximumFractionDigits: 4 }
             )}`;
 
+            // บรรทัด timestamp ตามรีเควส: "dd/mm/yyyy - ตัดสต๊อก" (หรือ เพิ่มสต๊อก/ตั้งต้น)
+            const at = new Date(item.atISO);
+            const stampLine = `${formatDMY(at)} - ${STAMP_ACTION[item.type]}`;
+
+            // หมายเหตุ: ตัด prefix ที่อาจถูกปั๊มไว้แล้ว เพื่อไม่ให้ซ้ำกับบรรทัด timestamp
+            const userNote = extractUserNote(item.note);
+
             return (
               <Card key={`${item.productId}_${item.id}`}>
                 <CardContent className="p-6">
@@ -342,6 +375,9 @@ export default function History() {
                       </div>
 
                       <div className="space-y-1 text-sm">
+                        {/* บรรทัด timestamp ใหม่ */}
+                        <p className="text-xs font-medium">{stampLine}</p>
+
                         <p className="text-muted-foreground">
                           SKU: {p?.sku ?? "-"}
                         </p>
@@ -361,15 +397,14 @@ export default function History() {
                         </p>
 
                         <p className="text-muted-foreground">
-                          หมายเหตุ:{" "}
-                          {item.note && item.note.trim() !== ""
-                            ? item.note
-                            : "-"}
+                          หมายเหตุ: {userNote !== "" ? userNote : "-"}
                         </p>
 
+                        {/* ถ้าต้องการแสดงวันเวลาเต็มเดิมเก็บไว้ได้:
                         <p className="text-muted-foreground text-xs">
                           {new Date(item.atISO).toLocaleString("th-TH")}
                         </p>
+                        */}
                       </div>
                     </div>
                   </div>
