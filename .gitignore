@@ -1,4 +1,19 @@
-# Logs
+# --- Dependencies (ตัวไลบรารีที่เราโหลดมา ห้ามอัปโหลดเด็ดขาด เพราะไฟล์ใหญ่มาก) ---
+node_modules
+.pnpm-store
+
+# --- Production Build (ไฟล์ผลลัพธ์จากการ build code ห้ามอัปโหลด) ---
+# ไฟล์พวก index.html, assets, favicon ที่ถูก generate ออกมาจะอยู่ในนี้
+dist
+dist-ssr
+build
+
+# --- Local Environment & Secrets (ความลับ ห้ามอัปโหลดเด็ดขาด) ---
+.env
+.env.*
+!.env.example
+
+# --- Logs (ไฟล์บันทึกการทำงาน/ข้อผิดพลาด) ---
 logs
 *.log
 npm-debug.log*
@@ -6,18 +21,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+vite-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# --- Testing & Coverage (ไฟล์รายงานผลการทดสอบ) ---
+coverage
+*.lcov
 
-# Environment variables (DO NOT COMMIT SECRETS)
-.env
-.env.*
-!.env.example
-
-# Editor directories and files
+# --- Editor & OS Files (ไฟล์ตั้งค่าส่วนตัวของเครื่องเรา หรือโปรแกรม Editor) ---
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -27,3 +37,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+Thumbs.db
+
+# --- Caches (ไฟล์ขยะที่ช่วยให้โปรแกรมทำงานเร็วขึ้น แต่ไม่ควรอัปโหลด) ---
+# ESLint cache (สำคัญมากที่คุณระบุว่าใช้ eslint)
+.eslintcache
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Prettier cache (ถ้ามี)
+node_modules/.cache

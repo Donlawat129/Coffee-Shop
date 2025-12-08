@@ -45,7 +45,7 @@ const Layout = ({ children }: LayoutProps) => {
             <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center">
               <Coffee className="w-6 h-6" />
             </div>
-            <h1 className="text-xl font-bold">ระบบจัดการสต๊อกร้านคาเฟ่</h1>
+            <h1 className="text-xl font-bold">ระบบบริหารจัดการคลังสินค้า ร้าน Technic coffee</h1>
 
             <div className="flex-grow" />
             {/* โซนขวา: อีเมลผู้ใช้ + ปุ่มออกจากระบบ */}
