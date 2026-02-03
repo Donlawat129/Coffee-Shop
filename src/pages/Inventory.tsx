@@ -1,5 +1,5 @@
-// src\pages\Inventory.tsx
-import { useEffect, useState } from "react";
+// src/pages/Inventory.tsx
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,6 @@ import {
   adjustStock,
   deleteProduct,
   updateProduct,
-  type ProductDoc,
 } from "@/lib/productsApi";
 
 type UIProduct = {
@@ -94,30 +93,44 @@ const Inventory = () => {
   // 🔄 subscribe realtime products (แก้ type ตรงนี้)
   useEffect(() => {
     const unsub = onProductsSubscribe((rows) => {
-      const mapped: UIProduct[] = (rows as unknown as ProductRow[]).map(
-        (r) => ({
-          id: r.id,
-          name: r.name,
-          sku: r.sku,
-          category: r.unit ?? r.categoryId ?? "-",
-          stock: Number(r.stock ?? 0),
-          price: Number(r.price ?? 0),
-          unit: r.unit ?? undefined,
-          expiryDate: r.expiryDate ?? undefined,
-          lotNumber: r.lotNumber ?? undefined,
-          note: r.note ?? undefined,
-        }),
-      );
+      const mapped: UIProduct[] = (rows as unknown as ProductRow[]).map((r) => ({
+        id: r.id,
+        name: r.name,
+        sku: r.sku,
+        category: r.unit ?? r.categoryId ?? "-",
+        stock: Number(r.stock ?? 0),
+        price: Number(r.price ?? 0),
+        unit: r.unit ?? undefined,
+        expiryDate: r.expiryDate ?? undefined,
+        lotNumber: r.lotNumber ?? undefined,
+        note: r.note ?? undefined,
+      }));
       setProducts(mapped);
     });
     return () => unsub();
   }, []);
 
+  // ✅ รายชื่อหมวดหมู่จากข้อมูลจริง + สินค้าที่กรองแล้ว
+  const categories = useMemo(() => {
+    const set = new Set(
+      products
+        .map((p) => p.category?.trim())
+        .filter((c): c is string => !!c && c !== "-")
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "th-TH"));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    return selectedSort === "ทุกหมวดหมู่"
+      ? products
+      : products.filter((p) => p.category === selectedSort);
+  }, [products, selectedSort]);
+
   const toggleProductSelection = (productId: string) => {
     setSelectedProducts((prev) =>
       prev.includes(productId)
         ? prev.filter((id) => id !== productId)
-        : [...prev, productId],
+        : [...prev, productId]
     );
   };
 
@@ -170,8 +183,9 @@ const Inventory = () => {
     handleOpenDeleteDialog([productId]);
   };
 
+  // ✅ เลือกเฉพาะสินค้าที่ตรงกับตัวกรองปัจจุบัน
   const handleSelectAll = () => {
-    setSelectedProducts(products.map((p) => p.id));
+    setSelectedProducts(filteredProducts.map((p) => p.id));
   };
 
   // === open dialogs per row ===
@@ -273,17 +287,17 @@ const Inventory = () => {
   const handleMultiCutConfirm = async (
     productIds: string[],
     quantity: number,
-    note: string,
+    note: string
   ) => {
     if (quantity <= 0 || productIds.length === 0) return;
     try {
       await Promise.all(
-        productIds.map((id) => adjustStock(id, "remove", quantity, note)),
+        productIds.map((id) => adjustStock(id, "remove", quantity, note))
       );
       toast({
         title: "ตัดสต๊อกสำเร็จ",
         description: `ตัดสต๊อก ${productIds.length} รายการ รายการละ ${quantity.toLocaleString(
-          "th-TH",
+          "th-TH"
         )} หน่วย`,
       });
       setSelectedProducts([]);
@@ -297,10 +311,10 @@ const Inventory = () => {
   };
 
   const selectedProductsData = products.filter((p) =>
-    selectedProducts.includes(p.id),
+    selectedProducts.includes(p.id)
   );
   const deleteTargetProducts = products.filter((p) =>
-    deleteTarget.includes(p.id),
+    deleteTarget.includes(p.id)
   );
 
   return (
@@ -393,11 +407,14 @@ const Inventory = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem
-                    onClick={() => setSelectedSort("ทุกหมวดหมู่")}
-                  >
+                  <DropdownMenuItem onClick={() => setSelectedSort("ทุกหมวดหมู่")}>
                     ทุกหมวดหมู่
                   </DropdownMenuItem>
+                  {categories.map((c) => (
+                    <DropdownMenuItem key={c} onClick={() => setSelectedSort(c)}>
+                      {c}
+                    </DropdownMenuItem>
+                  ))}
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button variant="outline" size="sm" onClick={handleSelectAll}>
@@ -407,82 +424,88 @@ const Inventory = () => {
           </div>
 
           <div className="space-y-2">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-              >
-                <Checkbox
-                  checked={selectedProducts.includes(product.id)}
-                  onCheckedChange={() => toggleProductSelection(product.id)}
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="font-semibold">{product.name}</h4>
-                    <Badge
-                      variant="secondary"
-                      className="bg-accent text-accent-foreground"
-                    >
-                      {product.category}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    SKU: {product.sku}
-                  </p>
-                  {product.note && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      หมายเหตุ: {product.note}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-success font-semibold mb-1">
-                    {product.stock.toLocaleString("th-TH", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 4,
-                    })}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    ฿
-                    {product.price.toLocaleString("th-TH", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => openEdit(product)}
-                  >
-                    <Edit className="w-4 h-4 text-primary" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    title="เพิ่มสต๊อก"
-                    onClick={() => openAddStock(product)}
-                  >
-                    <Plus className="w-4 h-4 text-success" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    title="ตัดสต๊อก"
-                    onClick={() => openRemoveStock(product)}
-                  >
-                    <Minus className="w-4 h-4 text-secondary" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleSingleDelete(product.id)}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
+            {filteredProducts.length === 0 ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                ไม่พบสินค้าในหมวด “{selectedSort}”
               </div>
-            ))}
+            ) : (
+              filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+                >
+                  <Checkbox
+                    checked={selectedProducts.includes(product.id)}
+                    onCheckedChange={() => toggleProductSelection(product.id)}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold">{product.name}</h4>
+                      <Badge
+                        variant="secondary"
+                        className="bg-accent text-accent-foreground"
+                      >
+                        {product.category}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      SKU: {product.sku}
+                    </p>
+                    {product.note && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        หมายเหตุ: {product.note}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-success font-semibold mb-1">
+                      {product.stock.toLocaleString("th-TH", {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 4,
+                      })}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      ฿
+                      {product.price.toLocaleString("th-TH", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => openEdit(product)}
+                    >
+                      <Edit className="w-4 h-4 text-primary" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title="เพิ่มสต๊อก"
+                      onClick={() => openAddStock(product)}
+                    >
+                      <Plus className="w-4 h-4 text-success" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title="ตัดสต๊อก"
+                      onClick={() => openRemoveStock(product)}
+                    >
+                      <Minus className="w-4 h-4 text-secondary" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleSingleDelete(product.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </Card>
       </div>
