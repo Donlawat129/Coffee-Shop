@@ -1,3 +1,4 @@
+// src\pages\Inventory.tsx
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ type UIProduct = {
   unit?: string;
   expiryDate?: string;
   lotNumber?: string;
+  note?: string;
 };
 
 /**
@@ -52,6 +54,7 @@ type ProductRow = {
   price?: number | null;
   expiryDate?: string | null;
   lotNumber?: string | null;
+  note?: string | null;
   // ช่องอื่นๆ ที่อาจมี แต่เราไม่ใช้: supplier, costPrice, createdAt, updatedAt ...
 };
 
@@ -70,6 +73,7 @@ const Inventory = () => {
     stock?: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string;
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -90,17 +94,20 @@ const Inventory = () => {
   // 🔄 subscribe realtime products (แก้ type ตรงนี้)
   useEffect(() => {
     const unsub = onProductsSubscribe((rows) => {
-      const mapped: UIProduct[] = (rows as unknown as ProductRow[]).map((r) => ({
-        id: r.id,
-        name: r.name,
-        sku: r.sku,
-        category: r.unit ?? r.categoryId ?? "-",
-        stock: Number(r.stock ?? 0),
-        price: Number(r.price ?? 0),
-        unit: r.unit ?? undefined,
-        expiryDate: r.expiryDate ?? undefined,
-        lotNumber: r.lotNumber ?? undefined,
-      }));
+      const mapped: UIProduct[] = (rows as unknown as ProductRow[]).map(
+        (r) => ({
+          id: r.id,
+          name: r.name,
+          sku: r.sku,
+          category: r.unit ?? r.categoryId ?? "-",
+          stock: Number(r.stock ?? 0),
+          price: Number(r.price ?? 0),
+          unit: r.unit ?? undefined,
+          expiryDate: r.expiryDate ?? undefined,
+          lotNumber: r.lotNumber ?? undefined,
+          note: r.note ?? undefined,
+        }),
+      );
       setProducts(mapped);
     });
     return () => unsub();
@@ -110,7 +117,7 @@ const Inventory = () => {
     setSelectedProducts((prev) =>
       prev.includes(productId)
         ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
+        : [...prev, productId],
     );
   };
 
@@ -178,6 +185,7 @@ const Inventory = () => {
       stock: product.stock,
       expiryDate: product.expiryDate,
       lotNumber: product.lotNumber,
+      note: product.note ?? "",
     });
     setIsEditDialogOpen(true);
   };
@@ -200,17 +208,19 @@ const Inventory = () => {
     unit?: string;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string; // ✅ new
   }) => {
     if (!editingId) return;
     try {
-      // map เข้า ProductDoc สำหรับ update (ไม่เกี่ยวกับ shape ของ subscribe)
-      const update: Partial<ProductDoc> = {
+      const update = {
         name: patch.name,
         sku: patch.sku,
         unit: patch.unit ?? patch.category ?? null,
         expiryDate: patch.expiryDate ?? null,
         lotNumber: patch.lotNumber ?? null,
-      };
+        note: patch.note?.trim() || null, // ✅ new
+      } as unknown as Parameters<typeof updateProduct>[1];
+
       await updateProduct(editingId, update);
       setIsEditDialogOpen(false);
       setEditInitial(null);
@@ -260,14 +270,20 @@ const Inventory = () => {
   };
 
   // ตัดสต๊อกหลายรายการ (ทีละจำนวนเท่ากัน)
-  const handleMultiCutConfirm = async (productIds: string[], quantity: number, note: string) => {
+  const handleMultiCutConfirm = async (
+    productIds: string[],
+    quantity: number,
+    note: string,
+  ) => {
     if (quantity <= 0 || productIds.length === 0) return;
     try {
-      await Promise.all(productIds.map((id) => adjustStock(id, "remove", quantity, note)));
+      await Promise.all(
+        productIds.map((id) => adjustStock(id, "remove", quantity, note)),
+      );
       toast({
         title: "ตัดสต๊อกสำเร็จ",
         description: `ตัดสต๊อก ${productIds.length} รายการ รายการละ ${quantity.toLocaleString(
-          "th-TH"
+          "th-TH",
         )} หน่วย`,
       });
       setSelectedProducts([]);
@@ -280,8 +296,12 @@ const Inventory = () => {
     }
   };
 
-  const selectedProductsData = products.filter((p) => selectedProducts.includes(p.id));
-  const deleteTargetProducts = products.filter((p) => deleteTarget.includes(p.id));
+  const selectedProductsData = products.filter((p) =>
+    selectedProducts.includes(p.id),
+  );
+  const deleteTargetProducts = products.filter((p) =>
+    deleteTarget.includes(p.id),
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -299,7 +319,9 @@ const Inventory = () => {
               </div>
             </div>
             <h3 className="font-semibold text-lg mb-2">เพิ่มสินค้าใหม่</h3>
-            <p className="text-sm text-muted-foreground mb-4">เพิ่มสินค้าใหม่เข้าสู่คลัง</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              เพิ่มสินค้าใหม่เข้าสู่คลัง
+            </p>
             <Button className="w-full" onClick={() => setIsAddDialogOpen(true)}>
               เพิ่มสินค้า
             </Button>
@@ -312,7 +334,9 @@ const Inventory = () => {
               </div>
             </div>
             <h3 className="font-semibold text-lg mb-2">ตัดสต๊อกสินค้า</h3>
-            <p className="text-sm text-muted-foreground mb-4">ลดจำนวนสต๊อกสินค้าที่มีอยู่</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              ลดจำนวนสต๊อกสินค้าที่มีอยู่
+            </p>
             <Button
               variant="default"
               className="w-full bg-secondary hover:bg-secondary/90"
@@ -330,7 +354,9 @@ const Inventory = () => {
               </div>
             </div>
             <h3 className="font-semibold text-lg mb-2">ลบสินค้า</h3>
-            <p className="text-sm text-muted-foreground mb-4">ลบสินค้าออกจากคลัง</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              ลบสินค้าออกจากคลัง
+            </p>
             <Button
               variant="destructive"
               className="w-full"
@@ -346,7 +372,9 @@ const Inventory = () => {
         {selectedProducts.length > 0 && (
           <Card className="p-4 mb-4 bg-accent/10">
             <div className="flex items-center justify-between">
-              <span className="font-medium">เลือกแล้ว: {selectedProducts.length} รายการ</span>
+              <span className="font-medium">
+                เลือกแล้ว: {selectedProducts.length} รายการ
+              </span>
               <span className="text-sm text-muted-foreground">
                 ไปที่ “ตัดสต๊อกสินค้า” หรือ “ลบสินค้า” เพื่อดำเนินการ
               </span>
@@ -365,7 +393,9 @@ const Inventory = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setSelectedSort("ทุกหมวดหมู่")}>
+                  <DropdownMenuItem
+                    onClick={() => setSelectedSort("ทุกหมวดหมู่")}
+                  >
                     ทุกหมวดหมู่
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -389,11 +419,21 @@ const Inventory = () => {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="font-semibold">{product.name}</h4>
-                    <Badge variant="secondary" className="bg-accent text-accent-foreground">
+                    <Badge
+                      variant="secondary"
+                      className="bg-accent text-accent-foreground"
+                    >
                       {product.category}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">SKU: {product.sku}</p>
+                  <p className="text-sm text-muted-foreground">
+                    SKU: {product.sku}
+                  </p>
+                  {product.note && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      หมายเหตุ: {product.note}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-success font-semibold mb-1">
@@ -410,10 +450,19 @@ const Inventory = () => {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => openEdit(product)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => openEdit(product)}
+                  >
                     <Edit className="w-4 h-4 text-primary" />
                   </Button>
-                  <Button size="icon" variant="ghost" title="เพิ่มสต๊อก" onClick={() => openAddStock(product)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title="เพิ่มสต๊อก"
+                    onClick={() => openAddStock(product)}
+                  >
                     <Plus className="w-4 h-4 text-success" />
                   </Button>
                   <Button
@@ -424,7 +473,11 @@ const Inventory = () => {
                   >
                     <Minus className="w-4 h-4 text-secondary" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => handleSingleDelete(product.id)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleSingleDelete(product.id)}
+                  >
                     <Trash2 className="w-4 h-4 text-destructive" />
                   </Button>
                 </div>
@@ -441,17 +494,20 @@ const Inventory = () => {
         mode="create"
         onCreate={async (data) => {
           try {
-            await addProduct({
+            const payload = {
               name: data.name,
               sku: data.sku,
               unit: data.unit,
-              categoryId: data.unit, // compatibility
-              initialQuantity: data.stock, // สต๊อกเริ่มต้น
+              categoryId: data.unit,
+              initialQuantity: data.stock,
               costPrice: 0,
               sellingPrice: 0,
               expiryDate: data.expiryDate,
               lotNumber: data.lotNumber,
-            });
+              note: data.note ?? null, // ✅ new
+            } as unknown as Parameters<typeof addProduct>[0];
+
+            await addProduct(payload);
             toast({ title: "เพิ่มสินค้าสำเร็จ" });
           } catch {
             toast({

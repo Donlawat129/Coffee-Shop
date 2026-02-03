@@ -13,6 +13,7 @@ import {
   getDocs,
   limit,
   deleteDoc,
+  endAt,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -22,6 +23,8 @@ export type LotHeader = {
   expiryDate?: string | null;
   itemsCount?: number;
   createdAt?: Timestamp;
+  /** ✅ หมายเหตุหัวล๊อต */
+  note?: string | null;
 };
 
 export type LotItem = {
@@ -40,12 +43,16 @@ export async function addLot(header: {
   lotNumber: string;
   supplier: string;
   expiryDate?: string;
+  /** ✅ รับ note */
+  note?: string;
 }) {
   const ref = await addDoc(collection(db, "lots"), {
     lotNumber: header.lotNumber,
     supplier: header.supplier,
     expiryDate: header.expiryDate ?? null,
     itemsCount: 0,
+    /** ✅ บันทึก note ที่หัวล๊อต */
+    note: header.note?.trim() || null,
     createdAt: serverTimestamp(),
   });
   return ref.id;
@@ -85,10 +92,10 @@ export async function getLot(lotId: string): Promise<(LotHeader & { id: string }
 export function onLotsSubscribe(
   cb: (rows: Array<LotHeader & { id: string }>) => void
 ) {
-  const q = query(collection(db, "lots"), orderBy("createdAt", "desc"));
-  return onSnapshot(q, (snap) => {
+  const qy = query(collection(db, "lots"), orderBy("createdAt", "desc"));
+  return onSnapshot(qy, (snap) => {
     const data = snap.docs.map((d) => {
-      const v = d.data() as LotHeader; // ✅ ไม่มี any
+      const v = d.data() as LotHeader;
       return { id: d.id, ...v };
     });
     cb(data);
@@ -100,10 +107,10 @@ export function onLotItemsSubscribe(
   lotId: string,
   cb: (rows: Array<LotItem & { id: string }>) => void
 ) {
-  const q = query(collection(db, "lots", lotId, "items"), orderBy("createdAt", "desc"));
-  return onSnapshot(q, (snap) => {
+  const qy = query(collection(db, "lots", lotId, "items"), orderBy("createdAt", "desc"));
+  return onSnapshot(qy, (snap) => {
     const data = snap.docs.map((d) => {
-      const v = d.data() as LotItem; // ✅ ไม่มี any
+      const v = d.data() as LotItem;
       return { id: d.id, ...v };
     });
     cb(data);
@@ -120,9 +127,29 @@ export async function deleteLotHard(lotId: string): Promise<void> {
     const snap = await getDocs(query(itemsCol, limit(BATCH_SIZE)));
     if (snap.empty) break;
     const batch = writeBatch(db);
-    snap.docs.forEach(d => batch.delete(d.ref));
+    snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
 
   await deleteDoc(lotRef);
+}
+
+/** ✅ ลบล๊อตทั้งหมดที่ createdAt <= dateISO (yyyy-mm-dd) — คืนจำนวนที่ลบได้ */
+export async function deleteLotsBefore(dateISO: string): Promise<number> {
+  const endTs = Timestamp.fromDate(new Date(`${dateISO}T23:59:59.999Z`));
+  const BATCH = 30; // คุมความเร็ว/โควต้า
+
+  let total = 0;
+  while (true) {
+    const snap = await getDocs(
+      query(collection(db, "lots"), orderBy("createdAt", "asc"), endAt(endTs), limit(BATCH))
+    );
+    if (snap.empty) break;
+
+    for (const d of snap.docs) {
+      await deleteLotHard(d.id);
+      total++;
+    }
+  }
+  return total;
 }

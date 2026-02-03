@@ -1,8 +1,7 @@
-// src/pages/Lots.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackagePlus, Lightbulb, Pencil } from "lucide-react";
+import { PackagePlus, Lightbulb, Pencil, Trash2 } from "lucide-react";
 import { AddLotDialog, type BulkLotPayload } from "@/components/lots/AddLotDialog";
 import { useToast } from "@/hooks/use-toast";
 import { addProduct } from "@/lib/productsApi";
@@ -16,6 +15,7 @@ import {
   type LotHeader,
   type LotItem,
   deleteLotHard,
+  deleteLotsBefore, // ✅ new
 } from "@/lib/lotsApi";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -24,11 +24,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type UiLotRow = {
   id: string;
   lotNumber: string;
-  supplier: string;             // ใช้เก็บ "ล๊อตใหม่" | "ล๊อตเดิม"
+  supplier: string;
   expiryDate?: string | null;
   itemsCount: number;
   createdAtISO: string;
@@ -50,7 +51,13 @@ const Lots = () => {
   const [editLotNumber, setEditLotNumber] = useState("");
   const [editExpiry, setEditExpiry] = useState("");
   const [editType, setEditType] = useState<"new" | "existing">("new");
+  const [editNote, setEditNote] = useState(""); // ✅ note
   const editLabel = editType === "new" ? "ล๊อตใหม่" : "ล๊อตเดิม";
+
+  // ====== Bulk delete dialog state ======
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkDate, setBulkDate] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // ลิสต์ล๊อตทั้งหมด (realtime)
   useEffect(() => {
@@ -58,7 +65,7 @@ const Lots = () => {
       const mapped: UiLotRow[] = rows.map((r) => ({
         id: r.id,
         lotNumber: r.lotNumber,
-        supplier: r.supplier ?? "", // เราจะใช้เก็บคำว่า "ล๊อตใหม่/ล๊อตเดิม"
+        supplier: r.supplier ?? "",
         expiryDate: r.expiryDate ?? null,
         itemsCount: r.itemsCount ?? 0,
         createdAtISO:
@@ -104,8 +111,10 @@ const Lots = () => {
     if (mode === "new") {
       lotId = await addLot({
         lotNumber: lotHeader.lotNumber,
-        supplier: "ล๊อตใหม่",        // เก็บสถานะใน field เดิม
+        supplier: "ล๊อตใหม่",
         expiryDate: lotHeader.expiryDate,
+        /** ✅ บันทึกหมายเหตุหัวล๊อต */
+        note: lotHeader.note,
       });
     }
 
@@ -122,7 +131,6 @@ const Lots = () => {
           sellingPrice: 0,
           expiryDate: it.expiryDate ?? lotHeader.expiryDate,
           lotNumber: it.lotNumber ?? lotHeader.lotNumber,
-          // supplier: ไม่ใช้แล้ว
         })
       )
     );
@@ -147,8 +155,6 @@ const Lots = () => {
       description: `เพิ่มสินค้า ${items.length} รายการ`,
     });
     setIsAddLotDialogOpen(false);
-
-    // เปิดรายละเอียดล๊อตที่เพิ่งจัดการ
     setSelectedLotId(lotId);
   };
 
@@ -158,6 +164,7 @@ const Lots = () => {
     setEditLotNumber(detailLot.lotNumber || "");
     setEditExpiry(detailLot.expiryDate || "");
     setEditType((detailLot.supplier ?? "ล๊อตใหม่") === "ล๊อตเดิม" ? "existing" : "new");
+    setEditNote(detailLot.note ?? ""); // ✅ โหลด note เดิม
     setEditOpen(true);
   };
 
@@ -168,6 +175,8 @@ const Lots = () => {
       lotNumber: editLotNumber.trim(),
       expiryDate: editExpiry || null,
       supplier: editLabel, // "ล๊อตใหม่"/"ล๊อตเดิม"
+      /** ✅ บันทึก note */
+      note: editNote.trim() || null,
       updatedAt: serverTimestamp(),
     });
     setEditOpen(false);
@@ -190,6 +199,26 @@ const Lots = () => {
     });
   };
 
+  // ====== ลบล๊อตเก่าตามวันที่ ======
+  const doBulkDelete = async () => {
+    if (!bulkDate) {
+      alert("กรุณาเลือกวันที่");
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const n = await deleteLotsBefore(bulkDate);
+      setBulkOpen(false);
+      setBulkDate("");
+      toast({
+        title: "ลบล๊อตเก่าแล้ว",
+        description: `ลบ ${n} ล๊อตที่สร้างก่อนหรือในวันที่ ${bulkDate}`,
+      });
+      // รีเฟรช state: onLotsSubscribe จะอัปเดตให้อัตโนมัติ
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,10 +226,17 @@ const Lots = () => {
         {/* header */}
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">เพิ่มสินค้าเป็นล๊อต</h2>
-          <Button onClick={() => setIsAddLotDialogOpen(true)} className="bg-success hover:bg-success/90">
-            <PackagePlus className="w-4 h-4 mr-2" />
-            เพิ่มล๊อตใหม่ / ใช้ล๊อตเดิม
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setIsAddLotDialogOpen(true)} className="bg-success hover:bg-success/90">
+              <PackagePlus className="w-4 h-4 mr-2" />
+              เพิ่มล๊อตใหม่ / ใช้ล๊อตเดิม
+            </Button>
+            {/* ✅ ปุ่มลบล๊อตเก่า */}
+            <Button variant="outline" onClick={() => setBulkOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              ลบล๊อตเก่า…
+            </Button>
+          </div>
         </div>
 
         {/* grid บน: ล็อตล่าสุด + ทิปส์ */}
@@ -278,7 +314,7 @@ const Lots = () => {
             </div>
 
             {detailLot ? (
-              <Card className="p-6">
+              <Card className="p-6 space-y-4">
                 <div className="grid md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <div className="text-muted-foreground">เลขล๊อต</div>
@@ -298,6 +334,12 @@ const Lots = () => {
                       {detailLot.itemsCount ?? detailItems.length} รายการ
                     </div>
                   </div>
+                </div>
+
+                {/* ✅ แสดงหมายเหตุหัวล๊อต */}
+                <div className="text-sm">
+                  <div className="text-muted-foreground">หมายเหตุ</div>
+                  <div className="font-medium whitespace-pre-wrap">{detailLot.note || "-"}</div>
                 </div>
               </Card>
             ) : (
@@ -379,7 +421,6 @@ const Lots = () => {
                   ล๊อตเดิม
                 </Button>
               </div>
-              
             </div>
 
             <div className="space-y-2">
@@ -392,12 +433,14 @@ const Lots = () => {
               <Input type="date" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)} />
             </div>
 
-          <div className="flex justify-between items-center gap-2 pt-2">
-              {/* ปุ่มลบอยู่ซ้ายมือ แยกจากกลุ่มบันทึก */}
-              <Button
-                variant="destructive"
-                onClick={deleteCurrentLot}
-              >
+            {/* ✅ แก้ไขหมายเหตุหัวล๊อต */}
+            <div className="space-y-2">
+              <Label>หมายเหตุ</Label>
+              <Textarea rows={3} value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+            </div>
+
+            <div className="flex justify-between items-center gap-2 pt-2">
+              <Button variant="destructive" onClick={deleteCurrentLot}>
                 ลบล๊อตนี้
               </Button>
 
@@ -405,7 +448,33 @@ const Lots = () => {
                 <Button variant="outline" onClick={() => setEditOpen(false)}>ยกเลิก</Button>
                 <Button onClick={saveEditHeader}>บันทึก</Button>
               </div>
-            </div>  
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Bulk Delete Old Lots Dialog ===== */}
+      <Dialog open={bulkOpen} onOpenChange={(o) => !bulkDeleting && setBulkOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ลบล๊อตเก่า</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>ลบล๊อตที่สร้างก่อนหรือในวันที่</Label>
+              <Input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              ระบบจะลบหัวล๊อตและรายการภายในล๊อตทั้งหมดที่สร้างก่อนหรือภายในวันที่ที่เลือก (ลบถาวร)
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkDeleting}>
+                ยกเลิก
+              </Button>
+              <Button variant="destructive" onClick={doBulkDelete} disabled={bulkDeleting || !bulkDate}>
+                {bulkDeleting ? "กำลังลบ…" : "ลบล๊อตเก่า"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

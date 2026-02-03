@@ -1,3 +1,4 @@
+//src\pages\Products.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ interface Product {
   stock: number;
   expiryDate?: string | null;
   lotNumber?: string | null;
+  note?: string | null;
 }
 
 type FullProduct = Product & {
@@ -46,6 +48,7 @@ type ProductFormInitial = {
   stock?: number;
   expiryDate?: string;
   lotNumber?: string;
+  note?: string;
 };
 
 /** อีเมลตามสิทธิ์ */
@@ -72,7 +75,9 @@ const Products = () => {
 
   // for edit
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editInitial, setEditInitial] = useState<ProductFormInitial | null>(null);
+  const [editInitial, setEditInitial] = useState<ProductFormInitial | null>(
+    null,
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // auth -> role
@@ -83,7 +88,8 @@ const Products = () => {
   // สิทธิ์บนหน้า Products
   const canEditCatalog = role === "admin" || role === "owner"; // เพิ่ม/แก้/ลบ
   const canAddStock = role === "admin" || role === "owner"; // ปุ่มเติม
-  const canRemoveStock = role === "admin" || role === "owner" || role === "staff"; // ปุ่มตัด
+  const canRemoveStock =
+    role === "admin" || role === "owner" || role === "staff"; // ปุ่มตัด
 
   const { toast } = useToast();
 
@@ -124,7 +130,10 @@ const Products = () => {
     });
   };
 
-  const handleAdjustStock = (product: Product, type: "add" | "remove"): void => {
+  const handleAdjustStock = (
+    product: Product,
+    type: "add" | "remove",
+  ): void => {
     if (type === "add" && !canAddStock) {
       denyToast();
       return;
@@ -144,24 +153,26 @@ const Products = () => {
     stock: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string; // ✅ new
   }): Promise<void> => {
     if (!canEditCatalog) {
       denyToast();
       return;
     }
-
     try {
-      await addProduct({
+      const payload = {
         name: data.name,
         sku: data.sku,
         unit: data.unit,
-        categoryId: data.unit, // compatibility เดิม
-        initialQuantity: data.stock, // สต๊อกเริ่มต้น
+        categoryId: data.unit,
+        initialQuantity: data.stock,
         costPrice: 0,
         sellingPrice: 0,
         expiryDate: data.expiryDate,
         lotNumber: data.lotNumber,
-      });
+        note: data.note ?? null, // ✅ new
+      } as unknown as Parameters<typeof addProduct>[0];
+      await addProduct(payload);
       toast({ title: "เพิ่มสินค้าสำเร็จ", description: data.name });
     } catch {
       toast({
@@ -176,7 +187,7 @@ const Products = () => {
     productId: string,
     type: "add" | "remove",
     qty: number,
-    note?: string
+    note?: string,
   ): Promise<void> => {
     if (type === "add" && !canAddStock) {
       denyToast();
@@ -234,7 +245,9 @@ const Products = () => {
     }
 
     setEditingId(p.id);
-    const full = (await getProduct(p.id).catch(() => null)) as FullProduct | null;
+    const full = (await getProduct(p.id).catch(
+      () => null,
+    )) as FullProduct | null;
     const v: FullProduct = full ?? (p as FullProduct);
 
     setEditInitial({
@@ -245,6 +258,7 @@ const Products = () => {
       stock: v.stock ?? 0,
       expiryDate: v.expiryDate || "",
       lotNumber: v.lotNumber || "",
+      note: (v.note ?? "") || "",
     });
     setIsEditDialogOpen(true);
   };
@@ -256,22 +270,25 @@ const Products = () => {
     stock: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string; // ✅ new
   }): Promise<void> => {
     if (!canEditCatalog || !editingId) {
       denyToast();
       return;
     }
-
     try {
-      await updateProduct(editingId, {
+      const patch = {
         name: data.name,
         sku: data.sku,
-        categoryId: data.unit, // map เพื่อเข้ากับ backend เดิม
+        categoryId: data.unit,
         unit: data.unit || null,
         stock: Number.isFinite(data.stock) ? data.stock : 0,
         expiryDate: data.expiryDate || null,
         lotNumber: data.lotNumber || null,
-      });
+        note: data.note?.trim() || null, // ✅ new
+      } as unknown as Parameters<typeof updateProduct>[1];
+
+      await updateProduct(editingId, patch);
       toast({ title: "อัปเดตสินค้าแล้ว", description: data.name });
       setIsEditDialogOpen(false);
       setEditInitial(null);
@@ -326,15 +343,28 @@ const Products = () => {
                   <p className="text-sm text-muted-foreground">
                     หน่วย: {labelUnit(product.unit)} | รหัส: {product.sku}
                   </p>
+                  {product.note && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      หมายเหตุ: {product.note}
+                    </p>
+                  )}
                 </div>
 
                 {/* ไอคอนแก้/ลบ: แสดงเฉพาะ admin/owner */}
                 {authReady && canEditCatalog && (
                   <div className="flex gap-2">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(product)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => openEdit(product)}
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" onClick={() => handleDelete(product.id)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleDelete(product.id)}
+                    >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -368,7 +398,10 @@ const Products = () => {
 
                 {/* ปุ่มตัดสต๊อก: แสดงทุก role ที่กำหนด (รวม staff) */}
                 {authReady && canRemoveStock && (
-                  <Button variant="destructive" onClick={() => handleAdjustStock(product, "remove")}>
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleAdjustStock(product, "remove")}
+                  >
                     <Minus className="w-4 h-4 mr-1" />
                     ตัดสต๊อก
                   </Button>
@@ -385,7 +418,7 @@ const Products = () => {
           open={isAddDialogOpen}
           onOpenChange={setIsAddDialogOpen}
           mode="create"
-          onCreate={handleCreateProduct}
+          onCreate={handleCreateProduct} // ✅ รองรับ note แล้ว
         />
       )}
 
@@ -402,7 +435,7 @@ const Products = () => {
           }}
           mode="edit"
           initial={editInitial ?? undefined}
-          onUpdate={handleUpdateProduct}
+          onUpdate={handleUpdateProduct} // ✅ รองรับ note แล้ว
         />
       )}
 
@@ -413,7 +446,9 @@ const Products = () => {
           type={adjustType}
           open={!!selectedProduct}
           onOpenChange={(open) => !open && setSelectedProduct(null)}
-          onAdjust={(qty, note) => handleAdjustCommit(selectedProduct.id, adjustType, qty, note)}
+          onAdjust={(qty, note) =>
+            handleAdjustCommit(selectedProduct.id, adjustType, qty, note)
+          }
         />
       )}
     </div>

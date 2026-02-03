@@ -1,4 +1,3 @@
-// src/components/products/AddProductDialog.tsx
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -16,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -23,28 +23,31 @@ interface AddProductDialogProps {
   mode?: "create" | "edit";
   initial?: {
     name: string;
-    category: string; // จะใช้เป็น "unit" ที่เลือก
+    category: string; // ใช้เป็น "unit" ที่เลือก
     sku: string;
     unit?: string;
     stock?: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string;         // ✅ new
   };
   onCreate?: (data: {
     name: string;
     sku: string;
-    unit: string;   // มาจาก select
-    stock: number;  // ฟิลด์ใหม่
+    unit: string;
+    stock: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string;         // ✅ new
   }) => Promise<void>;
   onUpdate?: (data: {
     name: string;
     sku: string;
-    unit: string;   // มาจาก select
-    stock: number;  // ฟิลด์ใหม่
+    unit: string;
+    stock: number;
     expiryDate?: string;
     lotNumber?: string;
+    note?: string;         // ✅ new
   }) => Promise<void>;
 }
 
@@ -58,12 +61,13 @@ export const AddProductDialog = ({
 }: AddProductDialogProps) => {
   const [formData, setFormData] = useState({
     name: "",
-    category: "", // ใช้เก็บ unit ที่เลือก
+    category: "", // เก็บ unit ที่เลือก
     sku: "",
     unit: "",
     stock: "",
     expiryDate: "",
     lotNumber: "",
+    note: "",          // ✅ new
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -77,6 +81,7 @@ export const AddProductDialog = ({
         stock: initial.stock != null ? String(initial.stock) : "",
         expiryDate: initial.expiryDate ?? "",
         lotNumber: initial.lotNumber ?? "",
+        note: initial.note ?? "",   // ✅ new
       });
     }
   }, [open, initial]);
@@ -94,27 +99,24 @@ export const AddProductDialog = ({
 
     setSubmitting(true);
     try {
+      const payload = {
+        name: formData.name.trim(),
+        sku: formData.sku.trim(),
+        unit: (formData.category || formData.unit).trim(),
+        stock: stockNum,
+        expiryDate: formData.expiryDate || undefined,
+        lotNumber: formData.lotNumber.trim() || undefined,
+        note: formData.note.trim() || undefined,      // ✅ new
+      };
+
       if (m === "create") {
         if (!onCreate) return;
-        await onCreate({
-          name: formData.name.trim(),
-          sku: formData.sku.trim(),
-          unit: (formData.category || formData.unit).trim(),
-          stock: stockNum,
-          expiryDate: formData.expiryDate || undefined,
-          lotNumber: formData.lotNumber.trim() || undefined,
-        });
+        await onCreate(payload);
       } else {
         if (!onUpdate) return;
-        await onUpdate({
-          name: formData.name.trim(),
-          sku: formData.sku.trim(),
-          unit: (formData.category || formData.unit).trim(),
-          stock: stockNum,
-          expiryDate: formData.expiryDate || undefined,
-          lotNumber: formData.lotNumber.trim() || undefined,
-        });
+        await onUpdate(payload);
       }
+
       onOpenChange(false);
       setFormData({
         name: "",
@@ -124,6 +126,7 @@ export const AddProductDialog = ({
         stock: "",
         expiryDate: "",
         lotNumber: "",
+        note: "",         // ✅ reset
       });
     } finally {
       setSubmitting(false);
@@ -169,8 +172,6 @@ export const AddProductDialog = ({
               />
             </div>
 
-            {/* เอา input หน่วยแบบพิมพ์ออก เพราะเลือกจาก Select แล้ว */}
-
             <div className="space-y-2">
               <Label htmlFor="stock">
                 สต๊อกเริ่มต้น <span className="text-destructive">*</span>
@@ -189,7 +190,7 @@ export const AddProductDialog = ({
               />
             </div>
 
-                        <div className="space-y-2">
+            <div className="space-y-2">
               <Label htmlFor="category">
                 หน่วยนับ <span className="text-destructive">*</span>
               </Label>
@@ -236,6 +237,20 @@ export const AddProductDialog = ({
                 onChange={(e) =>
                   setFormData({ ...formData, lotNumber: e.target.value })
                 }
+              />
+            </div>
+
+            {/* ✅ หมายเหตุสินค้า */}
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="note">หมายเหตุสินค้า</Label>
+              <Textarea
+                id="note"
+                rows={3}
+                value={formData.note}
+                onChange={(e) =>
+                  setFormData({ ...formData, note: e.target.value })
+                }
+                placeholder='เช่น "สินค้ากลุ่มคั่วอ่อน" หรือ "เก็บแยกจากความชื้น"'
               />
             </div>
           </div>

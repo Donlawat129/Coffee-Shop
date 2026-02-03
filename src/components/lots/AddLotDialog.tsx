@@ -1,4 +1,3 @@
-// src/components/lots/AddLotDialog.tsx
 import { useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -11,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 
 export type BulkLotItemInput = {
   id: string;        // client-only id
@@ -28,8 +28,8 @@ export type BulkLotPayload = {
   lotHeader: {
     lotNumber: string;      // ถ้า existing จะอิงหมายเลขล๊อตจากรายการที่เลือก
     expiryDate?: string;
-    // NOTE: ไม่ใช้ supplier แล้ว แต่ backend เดิมยังมี field นี้
-    // เราจะเซ็ต supplier เป็น "ล๊อตใหม่" / "ล๊อตเดิม" ฝั่ง caller
+    /** ✅ หมายเหตุหัวล๊อต */
+    note?: string;
   };
   items: Array<{
     name: string;
@@ -51,7 +51,7 @@ type AddLotDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onBulkCreate: (payload: BulkLotPayload) => Promise<void>;
-  existingLots: ExistingLot[]; // <- เพิ่มเข้ามาเพื่อเลือก "ล๊อตเดิม"
+  existingLots: ExistingLot[];
 };
 
 const UNIT_OPTIONS = [
@@ -64,6 +64,8 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
 
   const [lotNumber, setLotNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
+  /** ✅ ฟิลด์หมายเหตุหัวล๊อต */
+  const [lotNote, setLotNote] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState<BulkLotItemInput[]>([
@@ -98,7 +100,6 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // validate basic
     if (mode === "new") {
       if (!lotNumber.trim()) {
         alert("กรอกหมายเลขล๊อตให้ครบ");
@@ -141,6 +142,8 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
         lotHeader: {
           lotNumber: headerLotNo,
           expiryDate: headerExpiry,
+          /** ✅ ส่งหมายเหตุหัวล๊อต */
+          note: lotNote.trim() || undefined,
         },
         items: mapped,
       });
@@ -151,6 +154,7 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
       setSelectedExistingId("");
       setLotNumber("");
       setExpiryDate("");
+      setLotNote("");
       setProducts([{ id: "1", name: "", sku: "", unit: "", stock: "", expiryDate: "", lotNumber: "" }]);
     } finally {
       setSubmitting(false);
@@ -166,11 +170,11 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* ข้อมูลล๊อต */}
-          <div className="bg-muted/30 p-4 rounded-lg">
-            <h3 className="font-semibold mb-4">ข้อมูลล๊อต</h3>
+          <div className="bg-muted/30 p-4 rounded-lg space-y-4">
+            <h3 className="font-semibold">ข้อมูลล๊อต</h3>
 
             {/* เลือกโหมด */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>เลือกประเภทล๊อต</Label>
                 <Select value={mode} onValueChange={(v) => setMode(v as "new" | "existing")}>
@@ -214,6 +218,18 @@ export function AddLotDialog({ open, onOpenChange, onBulkCreate, existingLots }:
                   </div>
                 </>
               )}
+            </div>
+
+            {/* ✅ หมายเหตุหัวล๊อต */}
+            <div className="space-y-2">
+              <Label htmlFor="lotNote">หมายเหตุ (หัวล๊อต)</Label>
+              <Textarea
+                id="lotNote"
+                rows={3}
+                value={lotNote}
+                onChange={(e) => setLotNote(e.target.value)}
+                placeholder='เช่น "วัตถุดิบล็อตนี้คุณภาพพรีเมียม"'
+              />
             </div>
           </div>
 
